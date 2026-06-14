@@ -560,4 +560,34 @@ foreach (xlen IN ITEMS 32 64)
             "${CMAKE_BINARY_DIR}/isabelle/${arch}/ROOT"
     )
     add_custom_target(generated_isabelle_${arch} DEPENDS "${CMAKE_BINARY_DIR}/isabelle/${arch}/${arch_thy}.thy")
+
+
+    ############# Isla #############
+
+    # TODO: use ${SAIL_BIN} once Isla back-end integrated
+
+    # Build IR definitions for the Isla symbolic execution tool.
+    add_custom_command(
+        DEPENDS ${sail_srcs} ${config_file}
+        VERBATIM
+        OUTPUT "${arch}.ir"
+        COMMENT "Building Isla definitions from Sail model (${arch})"
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMAND
+            isla-sail
+            ${sail_common}
+            --isla-preserve encdec_compressed_forwards
+            --isla-preserve encdec_compressed_forwards_matches
+            --isla-preserve encdec_compressed_backwards
+            --isla-preserve encdec_compressed_backwards_matches
+            --isla-output-dir ${CMAKE_CURRENT_BINARY_DIR}
+            # The prefix of the output files.
+            -o "${arch}"
+            --config ${config_file}
+            # Input files.
+            ${SAIL_MODULES}
+            ${project_file}
+
+    )
+    add_custom_target(generated_isla_${arch} DEPENDS "${arch}.ir")
 endforeach()
