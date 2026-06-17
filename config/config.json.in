@@ -337,7 +337,7 @@
       "supported": true
     },
     "Zba": {
-      "supported": false
+      "supported": true
     },
     "Zbb": {
       "supported": false

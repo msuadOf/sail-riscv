@@ -60,12 +60,9 @@ mapping clause encdec = AMO(op, aq, rl, rs2, rs1, size, rd)
   <-> encdec_amoop(op) @ bool_bit(aq) @ bool_bit(rl) @ encdec_reg(rs2) @ encdec_reg(rs1) @ width_enc_wide(size) @ encdec_reg(rd) @ 0b0101111
   when amo_encoding_valid(size, op, rs2, rd)
 
-// NOTE: Currently, we only EA if address translation is successful.
-// This may need revisiting.
-$[split op]
-function clause execute AMO(op, aq, rl, rs2, rs1, width, rd) = {
-  let 'width = width;
-
+val execute_amo_width : forall 'width, 'width in {1, 2, 4, 8, 16}.
+  (amoop, bool, bool, regidx, regidx, int('width), regidx) -> ExecutionResult
+function execute_amo_width(op, aq, rl, rs2, rs1, width, rd) = {
   // This is checked during decoding.
   assert(width <= xlen_bytes * 2);
 
@@ -129,6 +126,19 @@ function clause execute AMO(op, aq, rl, rs2, rs1, width, rd) = {
     },
     Ok(false) => internal_error(__FILE__, __LINE__, "AMO got false from mem_write_value"),
     Err(e)    => Memory_Exception(vaddr, e),
+  }
+}
+
+// NOTE: Currently, we only EA if address translation is successful.
+// This may need revisiting.
+$[split op]
+function clause execute AMO(op, aq, rl, rs2, rs1, width, rd) = {
+  match width {
+    1  => execute_amo_width(op, aq, rl, rs2, rs1, 1, rd),
+    2  => execute_amo_width(op, aq, rl, rs2, rs1, 2, rd),
+    4  => execute_amo_width(op, aq, rl, rs2, rs1, 4, rd),
+    8  => execute_amo_width(op, aq, rl, rs2, rs1, 8, rd),
+    16 => execute_amo_width(op, aq, rl, rs2, rs1, 16, rd),
   }
 }
 

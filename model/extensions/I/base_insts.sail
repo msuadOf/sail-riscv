@@ -288,12 +288,23 @@ function clause execute LOAD(imm, rs1, rd, is_unsigned, width) = {
   // This is checked during decoding.
   assert(width <= xlen_bytes);
 
-  match vmem_read(rs1, offset, width, Load(Data), false, false, false) {
-    Ok(data) => {
-      X(rd) = extend_value(is_unsigned, data);
-      RETIRE_SUCCESS
+  match width {
+    1 => match vmem_read(rs1, offset, 1, Load(Data), false, false, false) {
+      Ok(data) => { X(rd) = extend_value(is_unsigned, data); RETIRE_SUCCESS },
+      Err(e) => e,
     },
-    Err(e) => e,
+    2 => match vmem_read(rs1, offset, 2, Load(Data), false, false, false) {
+      Ok(data) => { X(rd) = extend_value(is_unsigned, data); RETIRE_SUCCESS },
+      Err(e) => e,
+    },
+    4 => match vmem_read(rs1, offset, 4, Load(Data), false, false, false) {
+      Ok(data) => { X(rd) = extend_value(is_unsigned, data); RETIRE_SUCCESS },
+      Err(e) => e,
+    },
+    8 => match vmem_read(rs1, offset, 8, Load(Data), false, false, false) {
+      Ok(data) => { X(rd) = extend_value(is_unsigned, data); RETIRE_SUCCESS },
+      Err(e) => e,
+    },
   }
 }
 
@@ -319,10 +330,23 @@ function clause execute STORE(imm, rs2, rs1, width) = {
   // This is checked during decoding.
   assert(width <= xlen_bytes);
 
-  let data = X(rs2)[width * 8 - 1 .. 0];
-  match vmem_write(rs1, offset, width, data, Store(Data), false, false, false) {
-    Ok(_) => RETIRE_SUCCESS,
-    Err(e) => e,
+  match width {
+    1 => match vmem_write(rs1, offset, 1, X(rs2)[7 .. 0], Store(Data), false, false, false) {
+      Ok(_) => RETIRE_SUCCESS,
+      Err(e) => e,
+    },
+    2 => match vmem_write(rs1, offset, 2, X(rs2)[15 .. 0], Store(Data), false, false, false) {
+      Ok(_) => RETIRE_SUCCESS,
+      Err(e) => e,
+    },
+    4 => match vmem_write(rs1, offset, 4, X(rs2)[31 .. 0], Store(Data), false, false, false) {
+      Ok(_) => RETIRE_SUCCESS,
+      Err(e) => e,
+    },
+    8 => match vmem_write(rs1, offset, 8, X(rs2)[63 .. 0], Store(Data), false, false, false) {
+      Ok(_) => RETIRE_SUCCESS,
+      Err(e) => e,
+    },
   }
 }
 

@@ -318,11 +318,27 @@ function clause execute STORE_FP(imm, rs2, rs1, width) = {
   assert(width <= flen_bytes);
 
   let offset : xlenbits = sign_extend(imm);
-  let data = F(rs2)[width * 8 - 1 ..  0];
-  match vmem_write(rs1, offset, width, data, Store(Data), false, false, false) {
-    Ok(true)  => RETIRE_SUCCESS,
-    Ok(false) => internal_error(__FILE__, __LINE__, "store got false from vmem_write"),
-    Err(e)    => e,
+  match width {
+    1 => match vmem_write(rs1, offset, 1, F(rs2)[7 .. 0], Store(Data), false, false, false) {
+      Ok(true)  => RETIRE_SUCCESS,
+      Ok(false) => internal_error(__FILE__, __LINE__, "store got false from vmem_write"),
+      Err(e)    => e,
+    },
+    2 => match vmem_write(rs1, offset, 2, F(rs2)[15 .. 0], Store(Data), false, false, false) {
+      Ok(true)  => RETIRE_SUCCESS,
+      Ok(false) => internal_error(__FILE__, __LINE__, "store got false from vmem_write"),
+      Err(e)    => e,
+    },
+    4 => match vmem_write(rs1, offset, 4, F(rs2)[31 .. 0], Store(Data), false, false, false) {
+      Ok(true)  => RETIRE_SUCCESS,
+      Ok(false) => internal_error(__FILE__, __LINE__, "store got false from vmem_write"),
+      Err(e)    => e,
+    },
+    8 => match vmem_write(rs1, offset, 8, F(rs2)[63 .. 0], Store(Data), false, false, false) {
+      Ok(true)  => RETIRE_SUCCESS,
+      Ok(false) => internal_error(__FILE__, __LINE__, "store got false from vmem_write"),
+      Err(e)    => e,
+    },
   }
 }
 
