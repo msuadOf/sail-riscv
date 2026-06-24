@@ -6,6 +6,14 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // =======================================================================================
 
+$ifdef SYMBOLIC
+register __isla_use_extra_ops : bool = false
+
+val isla_carryless_mul = pure "isla_carryless_mul" : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits(2 * 'n)
+val isla_carryless_mulr = pure "isla_carryless_mulr" : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits('n)
+val isla_count_ones = pure "isla_count_ones" : forall 'n, 'n >= 0. bits('n) -> range(0, 'n)
+$endif
+
 // Reverse bits in each byte
 val brev8 : forall 'm, 'm >= 0 & mod('m, 8) == 0. (bits('m)) -> bits('m)
 function brev8(input) = {
@@ -16,6 +24,7 @@ function brev8(input) = {
 }
 
 // Carry-less multiply.
+$ifndef SYMBOLIC
 val carryless_mul : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits(2 * 'n)
 function carryless_mul(a, b) = {
   var result : bits(2 * 'n) = zeros();
@@ -25,8 +34,25 @@ function carryless_mul(a, b) = {
   };
   result
 }
+$else
+val carryless_mul_default : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits(2 * 'n)
+function carryless_mul_default(a, b) = {
+  var result : bits(2 * 'n) = zeros();
+  foreach (i from 0 to ('n - 1)) {
+    if   a[i] == 0b1
+    then result = result ^ (zero_extend(b) << i);
+  };
+  result
+}
+
+val carryless_mul : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits(2 * 'n)
+function carryless_mul(a, b) =
+  if __isla_use_extra_ops then isla_carryless_mul(a, b)
+  else carryless_mul_default(a, b)
+$endif
 
 // Reverse carry-less multiply.
+$ifndef SYMBOLIC
 val carryless_mulr : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits('n)
 function carryless_mulr(a, b) = {
   var result : bits('n) = zeros();
@@ -36,6 +62,22 @@ function carryless_mulr(a, b) = {
   };
   result
 }
+$else
+val carryless_mulr_default : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits('n)
+function carryless_mulr_default(a, b) = {
+  var result : bits('n) = zeros();
+  foreach (i from 0 to ('n - 1)) {
+    if   a[i] == 0b1
+    then result = result ^ (b >> ('n - i - 1));
+  };
+  result
+}
+
+val carryless_mulr : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits('n)
+function carryless_mulr(a, b) =
+  if __isla_use_extra_ops then isla_carryless_mulr(a, b)
+  else carryless_mulr_default(a, b)
+$endif
 
 // Equivalent reverse carry-less multiply.
 private val carryless_mul_reversed : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits('n)
@@ -76,6 +118,7 @@ function rev8(input) = {
   output
 }
 
+$ifndef SYMBOLIC
 val count_ones : forall 'n, 'n >= 0. (bits('n)) -> range(0, 'n)
 function count_ones(x) = {
   var count : range(0, 'n) = 0;
@@ -88,3 +131,22 @@ function count_ones(x) = {
   };
   count
 }
+$else
+val count_ones_default : forall 'n, 'n >= 0. (bits('n)) -> range(0, 'n)
+function count_ones_default(x) = {
+  var count : range(0, 'n) = 0;
+  foreach (i from 0 to ('n - 1)) {
+    if x[i] == 0b1 then {
+      let new_count = count + 1;
+      assert(new_count <= 'n);
+      count = new_count;
+    }
+  };
+  count
+}
+
+val count_ones : forall 'n, 'n >= 0. (bits('n)) -> range(0, 'n)
+function count_ones(x) =
+  if __isla_use_extra_ops then isla_count_ones(x)
+  else count_ones_default(x)
+$endif

@@ -555,8 +555,10 @@ mapping clause encdec = VIMTYPE(funct6, vs2, simm, vd)
 
 function clause execute VIMTYPE(funct6, vs2, simm, vd) = {
   let SEW      = get_sew();
+  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
+  assert_vector_num_elem(num_elem);
 
   if illegal_vd_unmasked() | not(valid_reg_group(vs2, LMUL_pow))
   then return Illegal_Instruction();
@@ -565,7 +567,7 @@ function clause execute VIMTYPE(funct6, vs2, simm, vd) = {
   let 'm = SEW;
 
   let vm_val  : bits('n)             = read_vmask_carry(num_elem, 0b0, zvreg);
-  let imm_val : bits('m)             = sign_extend(simm);
+  let imm_val : bits('m)             = sign_extend(SEW, simm);
   let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  : bits('n)             = read_vmask(num_elem, 0b0, vd);
 
@@ -613,8 +615,10 @@ mapping clause encdec = VIMCTYPE(funct6, vs2, simm, vd)
 
 function clause execute VIMCTYPE(funct6, vs2, simm, vd) = {
   let SEW      = get_sew();
+  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
+  assert_vector_num_elem(num_elem);
 
   if illegal_vd_unmasked() | not(valid_reg_group(vs2, LMUL_pow))
   then return Illegal_Instruction();
@@ -622,7 +626,7 @@ function clause execute VIMCTYPE(funct6, vs2, simm, vd) = {
   let 'n = num_elem;
   let 'm = SEW;
 
-  let imm_val : bits('m)             = sign_extend(simm);
+  let imm_val : bits('m)             = sign_extend(SEW, simm);
   let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  : bits('n)             = read_vmask(num_elem, 0b0, vd);
 
@@ -670,8 +674,10 @@ mapping clause encdec = VIMSTYPE(funct6, vs2, simm, vd)
 
 function clause execute VIMSTYPE(funct6, vs2, simm, vd) = {
   let SEW      = get_sew();
+  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
+  assert_vector_num_elem(num_elem);
 
   if illegal_vd_masked(vd) |
      not(valid_reg_group(vs2, LMUL_pow)) |
@@ -685,7 +691,7 @@ function clause execute VIMSTYPE(funct6, vs2, simm, vd) = {
   let vec_trues : bits('n) = ones();
 
   let vm_val  : bits('n)             = read_vmask_carry(num_elem, 0b0, zvreg);
-  let imm_val : bits('m)             = sign_extend(simm);
+  let imm_val : bits('m)             = sign_extend(SEW, simm);
   let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
 
@@ -735,8 +741,10 @@ mapping clause encdec = VICMPTYPE(funct6, vm, vs2, simm, vd)
 
 function clause execute VICMPTYPE(funct6, vm, vs2, simm, vd) = {
   let SEW      = get_sew();
+  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
+  assert_vector_num_elem(num_elem);
 
   if illegal_vd_unmasked() | not(valid_reg_group(vs2, LMUL_pow))
   then return Illegal_Instruction();
@@ -745,7 +753,7 @@ function clause execute VICMPTYPE(funct6, vm, vs2, simm, vd) = {
   let 'm = SEW;
 
   let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
-  let imm_val : bits('m)             = sign_extend(simm);
+  let imm_val : bits('m)             = sign_extend(SEW, simm);
   let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  : bits('n)             = read_vmask(num_elem, 0b0, vd);
 
@@ -758,12 +766,12 @@ function clause execute VICMPTYPE(funct6, vm, vs2, simm, vd) = {
   foreach (i from 0 to (num_elem - 1)) {
     if mask[i] == 0b1 then {
       let res : bool = match funct6 {
-        VICMP_VMSEQ    => vs2_val[i] == imm_val,
-        VICMP_VMSNE    => vs2_val[i] != imm_val,
-        VICMP_VMSLEU   => unsigned(vs2_val[i]) <= unsigned(imm_val),
-        VICMP_VMSLE    => signed(vs2_val[i]) <= signed(imm_val),
-        VICMP_VMSGTU   => unsigned(vs2_val[i]) > unsigned(imm_val),
-        VICMP_VMSGT    => signed(vs2_val[i]) > signed(imm_val)
+        VICMP_VMSEQ  => vs2_val[i] == imm_val,
+        VICMP_VMSNE  => vs2_val[i] != imm_val,
+        VICMP_VMSLEU => unsigned(vs2_val[i]) <= unsigned(imm_val),
+        VICMP_VMSLE  => signed(vs2_val[i]) <= signed(imm_val),
+        VICMP_VMSGTU => unsigned(vs2_val[i]) > unsigned(imm_val),
+        VICMP_VMSGT  => signed(vs2_val[i]) > signed(imm_val)
       };
       result[i] = bool_to_bit(res)
     }

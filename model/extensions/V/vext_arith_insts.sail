@@ -220,6 +220,8 @@ function clause execute NVSTYPE(funct6, vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -295,6 +297,8 @@ function clause execute NVTYPE(funct6, vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -359,6 +363,7 @@ function clause execute MASKTYPEV(vs2, vs1, vd) = {
   let SEW           = get_sew();
   let LMUL_pow      = get_lmul_pow();
   let num_elem      = get_num_elem(LMUL_pow, SEW); // max(VLMAX,VLEN/SEW))
+  assert_vector_num_elem(num_elem);
   let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (0 - LMUL_pow); // VLMAX
 
   if illegal_vd_masked(vd) |
@@ -407,10 +412,12 @@ mapping clause encdec = MOVETYPEV (vs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
+$ifndef SYMBOLIC
 function clause execute MOVETYPEV(vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
+  let num_elem = assert_vector_num_elem_value(num_elem);
 
   if illegal_vd_unmasked() |
      not(valid_reg_group(vs1, LMUL_pow)) |
@@ -437,6 +444,35 @@ function clause execute MOVETYPEV(vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute MOVETYPEV(vs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+  let num_elem = assert_vector_num_elem_value(num_elem);
+
+  if illegal_vd_unmasked() |
+     not(valid_reg_group(vs1, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, ones()) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  let result = isla_vector_select(mask, initial_result, vs1_val);
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = MOVETYPEV(vs1, vd)
   <-> "vmv.v.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs1)
@@ -609,6 +645,8 @@ function clause execute NXSTYPE(funct6, vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -683,6 +721,8 @@ function clause execute NXTYPE(funct6, vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -823,6 +863,7 @@ mapping clause encdec = MASKTYPEX(vs2, rs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
+
 function clause execute MASKTYPEX(vs2, rs1, vd) = {
   let start_element : nat = match get_start_element() {
     Ok(v)   => v,
@@ -833,6 +874,7 @@ function clause execute MASKTYPEX(vs2, rs1, vd) = {
   let SEW           = get_sew();
   let LMUL_pow      = get_lmul_pow();
   let num_elem      = get_num_elem(LMUL_pow, SEW); // max(VLMAX,VLEN/SEW))
+  assert_vector_num_elem(num_elem);
   let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (0 - LMUL_pow); // VLMAX
 
   if illegal_vd_masked(vd) |
@@ -883,7 +925,10 @@ mapping clause encdec = MOVETYPEX (rs1, vd)
 function clause execute MOVETYPEX(rs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
+  assert_sew(SEW);
+  assert_lmul_pow(LMUL_pow);
   let num_elem = get_num_elem(LMUL_pow, SEW);
+  let num_elem = assert_vector_num_elem_value(num_elem);
 
   if illegal_vd_unmasked() | not(valid_reg_group(vd, LMUL_pow))
   then return Illegal_Instruction();
@@ -901,7 +946,7 @@ function clause execute MOVETYPEX(rs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then result[i] = rs1_val
+    result[i] = mux2(mask[i], result[i], rs1_val)
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -940,6 +985,9 @@ function clause execute VITYPE(funct6, vm, vs2, simm, vd) = {
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
 
+  assert_sew(SEW);
+  assert_vector_num_elem(num_elem);
+
   if illegal_normal(vd, vm) |
      not(valid_reg_group(vs2, LMUL_pow)) |
      not(valid_reg_group(vd, LMUL_pow))
@@ -949,7 +997,7 @@ function clause execute VITYPE(funct6, vm, vs2, simm, vd) = {
   let 'm = SEW;
 
   let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
-  let imm_val : bits('m)             = sign_extend(simm);
+  let imm_val : bits('m)             = sign_extend(SEW, simm);
   let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
 
@@ -1048,6 +1096,8 @@ function clause execute NISTYPE(funct6, vm, vs2, uimm, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -1122,6 +1172,8 @@ function clause execute NITYPE(funct6, vm, vs2, uimm, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -1262,6 +1314,7 @@ mapping clause encdec = MASKTYPEI(vs2, simm, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
+$ifndef SYMBOLIC
 function clause execute MASKTYPEI(vs2, simm, vd) = {
   let start_element : nat = match get_start_element() {
     Ok(v)   => v,
@@ -1307,6 +1360,62 @@ function clause execute MASKTYPEI(vs2, simm, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+val masktypei_result : forall 'n 'm 'p, 'n >= 0 & is_sew_bitsize('m) .
+  (int('n), nat, int, int('p), bits('n), bits('m), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
+function masktypei_result(num_elem, start_element, end_element, real_num_elem, vm_val, scalar_val, vs2_val, vd_val) = {
+  assert_vector_num_elem(num_elem);
+  var result = vd_val;
+  let tail_ag : agtype = get_vtype_vta();
+  foreach (i from 0 to (num_elem - 1)) {
+    if i < start_element then {
+      result[i] = vd_val[i]
+    } else if i > end_element | i >= real_num_elem then {
+      result[i] = match tail_ag {
+        UNDISTURBED => vd_val[i],
+        AGNOSTIC    => vd_val[i] // TODO: configuration support
+      }
+    } else {
+      // the merge operates on all body elements
+      result[i] = if vm_val[i] == 0b1 then scalar_val else vs2_val[i]
+    }
+  };
+  result
+}
+
+function clause execute MASKTYPEI(vs2, simm, vd) = {
+  let start_element : nat = match get_start_element() {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+
+  let end_element   = get_end_element();
+  let SEW           = get_sew();
+  let LMUL_pow      = get_lmul_pow();
+  assert_sew(SEW);
+  let num_elem      = get_num_elem(LMUL_pow, SEW); // max(VLMAX,VLEN/SEW))
+  assert_vector_num_elem(num_elem);
+  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (0 - LMUL_pow); // VLMAX
+
+  if illegal_vd_masked(vd) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, 0b0, zvreg);
+  let imm_val : bits('m)             = sign_extend(SEW, simm);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+  let result = masktypei_result(num_elem, start_element, end_element, real_num_elem, vm_val, imm_val, vs2_val, vd_val);
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = MASKTYPEI(vs2, simm, vd)
   <-> "vmerge.vim" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ hex_bits_signed_5(simm) ^ sep() ^ "v0"
@@ -1321,8 +1430,10 @@ mapping clause encdec = MOVETYPEI (vd, simm)
 
 function clause execute MOVETYPEI(vd, simm) = {
   let SEW      = get_sew();
+  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
+  let num_elem = assert_vector_num_elem_value(num_elem);
 
   if illegal_vd_unmasked() | not(valid_reg_group(vd, LMUL_pow))
   then return Illegal_Instruction();
@@ -1330,7 +1441,7 @@ function clause execute MOVETYPEI(vd, simm) = {
   let 'n = num_elem;
   let 'm = SEW;
 
-  let imm_val : bits('m)             = sign_extend(simm);
+  let imm_val : bits('m)             = sign_extend(SEW, simm);
   let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
 
   let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, ones()) {
@@ -1340,7 +1451,7 @@ function clause execute MOVETYPEI(vd, simm) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then result[i] = imm_val
+    result[i] = mux2(mask[i], result[i], imm_val)
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -1649,6 +1760,8 @@ function clause execute WVVTYPE(funct6, vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -1727,6 +1840,8 @@ function clause execute WVTYPE(funct6, vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -1799,6 +1914,8 @@ function clause execute WMVVTYPE(funct6, vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -2269,6 +2386,8 @@ function clause execute WVXTYPE(funct6, vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -2347,6 +2466,8 @@ function clause execute WXTYPE(funct6, vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -2419,6 +2540,8 @@ function clause execute WMVXTYPE(funct6, vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
