@@ -43,12 +43,12 @@ function illegal_fp_variable_width(vd : vregidx, vm : bits(1), SEW : sew_bitsize
 
 // e. Normal check for floating-point reduction instructions
 function illegal_fp_reduction(SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
-  not(valid_vtype()) | not(assert_vstart(0)) | not(valid_fp_op(SEW, rm_3b))
+  not(valid_vtype()) | not(vstart_eq(0)) | not(valid_fp_op(SEW, rm_3b))
 }
 
 // f. Variable width check for floating-point widening reduction instructions
 function illegal_fp_widening_reduction(SEW : sew_bitsize, rm_3b : bits(3), EEW : int) -> bool = {
-  not(valid_vtype()) | not(assert_vstart(0)) | not(valid_fp_op(SEW, rm_3b)) |
+  not(valid_vtype()) | not(vstart_eq(0)) | not(valid_fp_op(SEW, rm_3b)) |
   not(EEW >= 8 & EEW <= elen)
 }
 

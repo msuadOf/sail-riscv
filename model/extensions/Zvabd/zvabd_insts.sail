@@ -14,6 +14,28 @@ function clause currentlyEnabled(Ext_Zvabd) = hartSupports(Ext_Zvabd) & currentl
 // as it is quite common used and simple to implement.
 private function valid_zvabd_sew(sew : sew_bitsize) -> bool = sew == 8 | sew == 16
 
+$ifdef SYMBOLIC
+val zvabd_abs_signed_bits : forall 'm, 'm > 0. bits('m) -> bits('m)
+function zvabd_abs_signed_bits(value) = {
+  let zero : bits('m) = zeros();
+  mux2(value['m - 1], value, zero - value)
+}
+
+val zvabd_abs_diff_signed_bits : forall 'm, 'm > 0. (bits('m), bits('m)) -> bits('m)
+function zvabd_abs_diff_signed_bits(lhs, rhs) = {
+  let lhs_minus_rhs = lhs - rhs;
+  let rhs_minus_lhs = rhs - lhs;
+  mux2(isla_bool_to_bit_or_default(signed(lhs) >= signed(rhs)), rhs_minus_lhs, lhs_minus_rhs)
+}
+
+val zvabd_abs_diff_unsigned_bits : forall 'm, 'm > 0. (bits('m), bits('m)) -> bits('m)
+function zvabd_abs_diff_unsigned_bits(lhs, rhs) = {
+  let lhs_minus_rhs = lhs - rhs;
+  let rhs_minus_lhs = rhs - lhs;
+  mux2(isla_bool_to_bit_or_default(unsigned(lhs) >= unsigned(rhs)), rhs_minus_lhs, lhs_minus_rhs)
+}
+$endif
+
 union clause instruction = VABS_V : (bits(1), vregidx, vregidx)
 
 $[wavedrom "funct6 _ _ _ OPMVV _ OP-V"]
@@ -22,6 +44,7 @@ mapping clause encdec = VABS_V(vm, vs2, vd)
   when currentlyEnabled(Ext_Zvabd)
     & ((get_sew() <= 32) | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64))
 
+$ifndef SYMBOLIC
 function clause execute VABS_V(vm, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -51,6 +74,45 @@ function clause execute VABS_V(vm, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VABS_V(vm, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if illegal_normal(vd, vm) then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = zvabd_abs_signed_bits(vs2_val[i]);
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = to_bits(SEW, abs_int(signed(vs2_val[i])))
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = VABS_V(vm, vs2, vd)
   <-> "vabs.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ maybe_vmask(vm)
@@ -67,6 +129,7 @@ mapping clause encdec = ZVABDTYPE(funct6, vm, vs2, vs1, vd)
   <-> encdec_zvabd_vabd_func6(funct6) @ vm @ encdec_vreg(vs2) @ encdec_vreg(vs1) @ 0b010 @ encdec_vreg(vd) @ 0b1010111
   when currentlyEnabled(Ext_Zvabd) & valid_zvabd_sew(get_sew())
 
+$ifndef SYMBOLIC
 function clause execute ZVABDTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -101,6 +164,59 @@ function clause execute ZVABDTYPE(funct6, vm, vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute ZVABDTYPE(funct6, vm, vs2, vs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if illegal_normal(vd, vm) then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    match funct6 {
+      VV_VABD => {
+        foreach (i from 0 to (num_elem - 1)) {
+          body_result[i] = zvabd_abs_diff_signed_bits(vs2_val[i], vs1_val[i]);
+        }
+      },
+      VV_VABDU => {
+        foreach (i from 0 to (num_elem - 1)) {
+          body_result[i] = zvabd_abs_diff_unsigned_bits(vs2_val[i], vs1_val[i]);
+        }
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = match funct6 {
+          VV_VABD  => to_bits(SEW, abs_int(signed(vs2_val[i]) - signed(vs1_val[i]))),
+          VV_VABDU => to_bits(SEW, abs_int(unsigned(vs2_val[i]) - unsigned(vs1_val[i])))
+        };
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping vabd_mnemonic : zvabd_vabd_func6 <-> string = {
   VV_VABD  <-> "vabd.vv",

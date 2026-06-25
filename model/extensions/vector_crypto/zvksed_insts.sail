@@ -15,6 +15,7 @@ mapping clause encdec = VSM4K_VI(vs2, uimm, vd)
   <-> 0b100001 @ 0b1 @ encdec_vreg(vs2) @ uimm @ 0b010 @ encdec_vreg(vd) @ 0b1110111
   when currentlyEnabled(Ext_Zvksed) & get_sew() == 32 & zvk_check_encdec(128, 4)
 
+$ifndef SYMBOLIC
 function clause execute VSM4K_VI(vs2, uimm, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -63,6 +64,60 @@ function clause execute VSM4K_VI(vs2, uimm, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VSM4K_VI(vs2, uimm, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+
+  let rnd = 0b00 @ uimm[2..0];
+
+  let eg_len   = (unsigned(vl) / 4);
+  let eg_start = (unsigned(vstart) / 4);
+
+  foreach (i from eg_start to (eg_len - 1)) {
+    assert(i * 4 + 3 < num_elem);
+
+    if __isla_use_extra_ops then {
+      write_velem_quad(vd, SEW, isla_sm4_key_schedule(get_velem_quad(vs2_val, i), rnd), i)
+    } else {
+      let rk_in = get_velem_quad_vec(vs2_val, i);
+
+      var rk_out : vector(4, bits(32)) = vector_init(zeros());
+
+      var B = rk_in[1] ^ rk_in[2] ^ rk_in[3] ^ zvk_sm4_sbox(rnd << 2);
+      var S = zvk_sm4_subword(B);
+      rk_out[0] = zvk_round_key(rk_in[0], S);
+
+      B = rk_in[2]  ^ rk_in[3]  ^ rk_out[0] ^ zvk_sm4_sbox(rnd << 2 + 1);
+      S = zvk_sm4_subword(B);
+      rk_out[1] = zvk_round_key(rk_in[1], S);
+
+      B = rk_in[3]  ^ rk_out[0] ^ rk_out[1] ^ zvk_sm4_sbox(rnd << 2 + 2);
+      S = zvk_sm4_subword(B);
+      rk_out[2] = zvk_round_key(rk_in[2], S);
+
+      B = rk_out[0] ^ rk_out[1] ^ rk_out[2] ^ zvk_sm4_sbox(rnd << 2 + 3);
+      S = zvk_sm4_subword(B);
+      rk_out[3] = zvk_round_key(rk_in[3], S);
+
+      write_velem_quad_vec(vd, SEW, rk_out, i)
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = VSM4K_VI(vs2, uimm, vd)
   <-> "vsm4k.vi" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ hex_bits_5(uimm)

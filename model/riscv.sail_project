@@ -562,6 +562,7 @@ unit_tests {
 
   files
     unit_tests/test_mstatus.sail,
+    unit_tests/test_prelude_helpers.sail,
 }
 
 main {

@@ -44,7 +44,7 @@ mapping clause encdec = VVTYPE(funct6, vm, vs2, vs1, vd)
   <-> encdec_vvfunct6(funct6) @ vm @ encdec_vreg(vs2) @ encdec_vreg(vs1) @ 0b000 @ encdec_vreg(vd) @ 0b1010111
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64 & valid_wide_vvtype(funct6))
-
+$ifndef SYMBOLIC
 function clause execute VVTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW_pow  = get_sew_pow();
   let SEW      = get_sew();
@@ -91,7 +91,6 @@ function clause execute VVTYPE(funct6, vm, vs2, vs1, vd) = {
     Err(()) => return Illegal_Instruction()
   };
   var result = initial_result;
-
   foreach (i from 0 to (num_elem - 1)) {
     if mask[i] == 0b1 then {
       result[i] = match funct6 {
@@ -163,6 +162,228 @@ function clause execute VVTYPE(funct6, vm, vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VVTYPE(funct6, vm, vs2, vs1, vd) = {
+  let SEW_pow  = get_sew_pow();
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  // "The vrgatherei16.vv form uses SEW/LMUL for the data in vs2 but
+  // EEW=16 and EMUL = (16/SEW)*LMUL for the indices in vs1."  Other
+  // than that, all the other instructions here use a uniform SEW/LMUL
+  // for their vector operands.  Also, "For any vrgather instruction,
+  // the destination vector register group cannot overlap with the
+  // source vector register groups, otherwise the instruction encoding
+  // is reserved."
+
+  // Check for source destination overlaps for vrgather instructions.
+  let src_dst_overlap : bool = if funct6 == VV_VRGATHER | funct6 == VV_VRGATHEREI16
+                               then vs1 == vd | vs2 == vd
+                               else false;
+
+  let vs1_emul_pow = if funct6 == VV_VRGATHEREI16 then 4 + LMUL_pow - SEW_pow else LMUL_pow;
+
+  if illegal_normal(vd, vm) |
+     not(valid_reg_overlap(vs1, vd, vs1_emul_pow, LMUL_pow)) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     src_dst_overlap
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1); // not used for VV_VRGATHEREI16.
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  // See above for the vs1 operand of vrgatherei16.vv.  This is a
+  // different variable from `vs1_val` due to its different type.
+  let vs1_val_vrgatherei16 : vector('n, bits(16)) = if funct6 == VV_VRGATHEREI16
+                                                    then read_vreg(num_elem, 16, vs1_emul_pow, vs1)
+                                                    else vector_init(zeros());
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    var sat = 0b0;
+    match funct6 {
+      VV_VADD          => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] + vs1_val[i]
+      },
+      VV_VSUB          => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] - vs1_val[i]
+      },
+      VV_VAND          => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] & vs1_val[i]
+      },
+      VV_VOR           => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] | vs1_val[i]
+      },
+      VV_VXOR          => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] ^ vs1_val[i]
+      },
+      VV_VSADDU        => foreach (i from 0 to (num_elem - 1)) {
+        let addend : bits('m + 1) = zero_extend_one_sew(SEW, vs2_val[i]) + zero_extend_one_sew(SEW, vs1_val[i]);
+        body_result[i] = isla_unsigned_saturation_narrow1_result(addend);
+        sat = sat | (mask[i] & isla_unsigned_saturation_narrow1_flag(addend))
+      },
+      VV_VSADD         => foreach (i from 0 to (num_elem - 1)) {
+        let addend : bits('m + 1) = sign_extend_one_sew(SEW, vs2_val[i]) + sign_extend_one_sew(SEW, vs1_val[i]);
+        body_result[i] = isla_signed_saturation_narrow1_result(addend);
+        sat = sat | (mask[i] & isla_signed_saturation_narrow1_flag(addend))
+      },
+      VV_VSSUBU        => foreach (i from 0 to (num_elem - 1)) {
+        let minuend : bits('m + 1) = zero_extend_one_sew(SEW, vs2_val[i]);
+        let subtrahend : bits('m + 1) = zero_extend_one_sew(SEW, vs1_val[i]);
+        let diff : bits('m + 1) = minuend - subtrahend;
+        let zero_val : bits('m) = vs2_val[i] ^ vs2_val[i];
+        let underflow = isla_bool_to_bit_or_default(unsigned(vs2_val[i]) < unsigned(vs1_val[i]));
+        body_result[i] = isla_mux2(underflow, isla_unsigned_saturation_narrow1_result(diff), zero_val)
+      },
+      VV_VSSUB         => foreach (i from 0 to (num_elem - 1)) {
+        let diff : bits('m + 1) = sign_extend_one_sew(SEW, vs2_val[i]) - sign_extend_one_sew(SEW, vs1_val[i]);
+        body_result[i] = isla_signed_saturation_narrow1_result(diff);
+        sat = sat | (mask[i] & isla_signed_saturation_narrow1_flag(diff))
+      },
+      VV_VSMUL         => foreach (i from 0 to (num_elem - 1)) {
+        let result_mul = to_bits_unsafe('m * 2, signed(vs2_val[i]) * signed(vs1_val[i]));
+        let rounding_incr = isla_fixed_rounding_incr(result_mul, SEW - 1, vcsr[vxrm]);
+        let result_wide = isla_add_bit(result_mul >> (SEW - 1), rounding_incr);
+        let result_sat_input : bits('m + 1) = low_sew_plus_one_bits(SEW, result_wide);
+        body_result[i] = isla_signed_saturation_narrow1_result(result_sat_input);
+        sat = sat | (mask[i] & isla_signed_saturation_narrow1_flag(result_sat_input))
+      },
+      VV_VSLL          => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = get_shift_amount(vs1_val[i], SEW);
+        body_result[i] = vs2_val[i] << shift_amount
+      },
+      VV_VSRL          => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = get_shift_amount(vs1_val[i], SEW);
+        body_result[i] = vs2_val[i] >> shift_amount
+      },
+      VV_VSRA          => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_arith_shiftr(vs2_val[i], shift_amount_bits_sew(SEW, vs1_val[i]))
+      },
+      VV_VSSRL         => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = get_shift_amount(vs1_val[i], SEW);
+        let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+        body_result[i] = isla_add_bit(vs2_val[i] >> shift_amount, rounding_incr)
+      },
+      VV_VSSRA         => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = get_shift_amount(vs1_val[i], SEW);
+        let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+        body_result[i] = isla_add_bit(isla_arith_shiftr(vs2_val[i], shift_amount_bits_sew(SEW, vs1_val[i])), rounding_incr)
+      },
+      VV_VMINU         => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_mux2(isla_bool_to_bit_or_default(unsigned(vs2_val[i]) < unsigned(vs1_val[i])), vs1_val[i], vs2_val[i])
+      },
+      VV_VMIN          => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_mux2(isla_bool_to_bit_or_default(signed(vs2_val[i]) < signed(vs1_val[i])), vs1_val[i], vs2_val[i])
+      },
+      VV_VMAXU         => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_mux2(isla_bool_to_bit_or_default(unsigned(vs2_val[i]) < unsigned(vs1_val[i])), vs2_val[i], vs1_val[i])
+      },
+      VV_VMAX          => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_mux2(isla_bool_to_bit_or_default(signed(vs2_val[i]) < signed(vs1_val[i])), vs2_val[i], vs1_val[i])
+      },
+      VV_VRGATHER      => foreach (i from 0 to (num_elem - 1)) {
+        let idx = unsigned(vs1_val[i]);
+        assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+        let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+        assert(VLMAX <= 'n);
+        body_result[i] = if idx < VLMAX then vs2_val[idx] else zeros()
+      },
+      VV_VRGATHEREI16  => foreach (i from 0 to (num_elem - 1)) {
+        let idx = unsigned(vs1_val_vrgatherei16[i]);
+        assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+        let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+        assert(VLMAX <= 'n);
+        body_result[i] = if idx < VLMAX then vs2_val[idx] else zeros()
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result);
+    vcsr[vxsat] = vcsr[vxsat] | sat
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = match funct6 {
+          VV_VADD          => vs2_val[i] + vs1_val[i],
+          VV_VSUB          => vs2_val[i] - vs1_val[i],
+          VV_VAND          => vs2_val[i] & vs1_val[i],
+          VV_VOR           => vs2_val[i] | vs1_val[i],
+          VV_VXOR          => vs2_val[i] ^ vs1_val[i],
+          VV_VSADDU        => unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) + zero_extend('m + 1, vs1_val[i])),
+          VV_VSADD         => signed_saturation('m, sign_extend('m + 1, vs2_val[i]) + sign_extend('m + 1, vs1_val[i])),
+          VV_VSSUBU        => {
+                                if unsigned(vs2_val[i]) < unsigned(vs1_val[i]) then zeros()
+                                else unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) - zero_extend('m + 1, vs1_val[i]))
+                              },
+          VV_VSSUB         => signed_saturation('m, sign_extend('m + 1, vs2_val[i]) - sign_extend('m + 1, vs1_val[i])),
+          VV_VSMUL         => {
+                                let result_mul = to_bits_unsafe('m * 2, signed(vs2_val[i]) * signed(vs1_val[i]));
+                                let rounding_incr = get_fixed_rounding_incr(result_mul, 'm - 1);
+                                let result_wide = (result_mul >> ('m - 1)) + zero_extend('m * 2, rounding_incr);
+                                signed_saturation('m, result_wide['m..0])
+                              },
+          VV_VSLL          => {
+                                let shift_amount = get_shift_amount(vs1_val[i], SEW);
+                                vs2_val[i] << shift_amount
+                              },
+          VV_VSRL          => {
+                                let shift_amount = get_shift_amount(vs1_val[i], SEW);
+                                vs2_val[i] >> shift_amount
+                              },
+          VV_VSRA          => {
+                                let shift_amount = get_shift_amount(vs1_val[i], SEW);
+                                let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
+                                (v_double >> shift_amount)[SEW - 1 .. 0]
+                              },
+          VV_VSSRL         => {
+                                let shift_amount = get_shift_amount(vs1_val[i], SEW);
+                                let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+                                (vs2_val[i] >> shift_amount) + zero_extend('m, rounding_incr)
+                              },
+          VV_VSSRA         => {
+                                let shift_amount = get_shift_amount(vs1_val[i], SEW);
+                                let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+                                let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
+                                (v_double >> shift_amount)[SEW - 1 .. 0] + zero_extend('m, rounding_incr)
+                              },
+          VV_VMINU         => to_bits_unsafe(SEW, min(unsigned(vs2_val[i]), unsigned(vs1_val[i]))),
+          VV_VMIN          => to_bits_unsafe(SEW, min(signed(vs2_val[i]), signed(vs1_val[i]))),
+          VV_VMAXU         => to_bits_unsafe(SEW, max(unsigned(vs2_val[i]), unsigned(vs1_val[i]))),
+          VV_VMAX          => to_bits_unsafe(SEW, max(signed(vs2_val[i]), signed(vs1_val[i]))),
+          VV_VRGATHER      => {
+                                let idx = unsigned(vs1_val[i]);
+                                assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+                                let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+                                assert(VLMAX <= 'n);
+                                if idx < VLMAX then vs2_val[idx] else zeros()
+                              },
+          VV_VRGATHEREI16  => {
+                                let idx = unsigned(vs1_val_vrgatherei16[i]);
+                                assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+                                let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+                                assert(VLMAX <= 'n);
+                                if idx < VLMAX then vs2_val[idx] else zeros()
+                              }
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping vvtype_mnemonic : vvfunct6 <-> string = {
   VV_VADD          <-> "vadd.vv",
@@ -205,6 +426,7 @@ mapping clause encdec = NVSTYPE(funct6, vm, vs2, vs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 16)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 32)
 
+$ifndef SYMBOLIC
 function clause execute NVSTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -259,6 +481,80 @@ function clause execute NVSTYPE(funct6, vm, vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute NVSTYPE(funct6, vm, vs2, vs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  let SEW_widen      = SEW * 2;
+  let LMUL_pow_widen = LMUL_pow + 1;
+
+  if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
+      not(valid_reg_overlap(vs2, vd, LMUL_pow_widen, LMUL_pow)) |
+      not(valid_reg_group(vs1, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW_widen <= 64);
+  assert(LMUL_pow_widen <= 3);
+  assert_narrowing_sew(SEW);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
+
+  let 'n = num_elem;
+  let 'm = SEW;
+  let 'o = SEW_widen;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vs2_val : vector('n, bits('o)) = read_vreg(num_elem, SEW_widen, LMUL_pow_widen, vs2);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result = initial_result;
+    match funct6 {
+      NVS_VNSRL  => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = isla_narrowing_shift_amount(vs1_val[i]);
+        body_result[i] = isla_low_half(vs2_val[i] >> shift_amount)
+      },
+      NVS_VNSRA  => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = isla_narrowing_shift_amount(vs1_val[i]);
+        let v_double : bits('o * 2) = isla_widen_signed(vs2_val[i]);
+        let arith_shifted : bits('o) = isla_low_half(v_double >> shift_amount);
+        body_result[i] = isla_low_half(arith_shifted)
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = match funct6 {
+          NVS_VNSRL  => {
+                          let shift_amount = get_shift_amount(vs1_val[i], SEW_widen);
+                          (vs2_val[i] >> shift_amount)[SEW - 1 .. 0]
+                        },
+          NVS_VNSRA  => {
+                          let shift_amount = get_shift_amount(vs1_val[i], SEW_widen);
+                          let v_double : bits('o * 2) = sign_extend(vs2_val[i]);
+                          let arith_shifted : bits('o) = (v_double >> shift_amount)[SEW_widen - 1 .. 0];
+                          (arith_shifted)[SEW - 1 .. 0]
+                        }
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping nvstype_mnemonic : nvsfunct6 <-> string = {
   NVS_VNSRL       <-> "vnsrl.wv",
@@ -282,6 +578,7 @@ mapping clause encdec = NVTYPE(funct6, vm, vs2, vs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 16)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 32)
 
+$ifndef SYMBOLIC
 function clause execute NVTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -337,6 +634,89 @@ function clause execute NVTYPE(funct6, vm, vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute NVTYPE(funct6, vm, vs2, vs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  let SEW_widen      = SEW * 2;
+  let LMUL_pow_widen = LMUL_pow + 1;
+
+  if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
+      not(valid_reg_overlap(vs2, vd, LMUL_pow_widen, LMUL_pow)) |
+      not(valid_reg_group(vs1, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW_widen <= 64);
+  assert(LMUL_pow_widen <= 3);
+  assert_narrowing_sew(SEW);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
+
+  let 'n = num_elem;
+  let 'm = SEW;
+  let 'o = SEW_widen;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vs2_val : vector('n, bits('o)) = read_vreg(num_elem, SEW_widen, LMUL_pow_widen, vs2);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result = initial_result;
+    var sat = 0b0;
+    match funct6 {
+      NV_VNCLIPU => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = isla_narrowing_shift_amount(vs1_val[i]);
+        let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+        let result_wide = isla_add_bit(vs2_val[i] >> shift_amount, rounding_incr);
+        body_result[i] = isla_unsigned_saturation_half_result(result_wide);
+        sat = sat | (mask[i] & isla_unsigned_saturation_half_flag(result_wide))
+      },
+      NV_VNCLIP  => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = isla_narrowing_shift_amount(vs1_val[i]);
+        let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+        let v_double : bits('m * 4) = isla_widen_signed(vs2_val[i]);
+        let shifted : bits('o) = isla_low_half(v_double >> shift_amount);
+        let result_wide = isla_add_bit(shifted, rounding_incr);
+        body_result[i] = isla_signed_saturation_half_result(result_wide);
+        sat = sat | (mask[i] & isla_signed_saturation_half_flag(result_wide))
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result);
+    vcsr[vxsat] = vcsr[vxsat] | sat
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        let shift_amount = get_shift_amount(vs1_val[i], SEW_widen);
+        let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+        result[i] = match funct6 {
+          NV_VNCLIPU => {
+                          let result_wide = (vs2_val[i] >> shift_amount) + zero_extend('o, rounding_incr);
+                          unsigned_saturation('m, result_wide);
+                        },
+          NV_VNCLIP  => {
+                          let v_double : bits('m * 4) = sign_extend(vs2_val[i]);
+                          let result_wide = (v_double >> shift_amount)['o - 1 .. 0] + zero_extend('o, rounding_incr);
+                          signed_saturation('m, result_wide);
+                        }
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping nvtype_mnemonic : nvfunct6 <-> string = {
   NV_VNCLIPU     <-> "vnclipu.wv",
@@ -364,7 +744,7 @@ function clause execute MASKTYPEV(vs2, vs1, vd) = {
   let LMUL_pow      = get_lmul_pow();
   let num_elem      = get_num_elem(LMUL_pow, SEW); // max(VLMAX,VLEN/SEW))
   assert_vector_num_elem(num_elem);
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (0 - LMUL_pow); // VLMAX
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow); // VLMAX
 
   if illegal_vd_masked(vd) |
      not(valid_reg_group(vs1, LMUL_pow)) |
@@ -417,7 +797,7 @@ function clause execute MOVETYPEV(vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
-  let num_elem = assert_vector_num_elem_value(num_elem);
+  let num_elem = checked_vector_num_elem_value(num_elem);
 
   if illegal_vd_unmasked() |
      not(valid_reg_group(vs1, LMUL_pow)) |
@@ -449,7 +829,7 @@ function clause execute MOVETYPEV(vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
-  let num_elem = assert_vector_num_elem_value(num_elem);
+  let num_elem = checked_vector_num_elem_value(num_elem);
 
   if illegal_vd_unmasked() |
      not(valid_reg_group(vs1, LMUL_pow)) |
@@ -507,7 +887,7 @@ mapping clause encdec = VXTYPE(funct6, vm, vs2, rs1, vd)
   <-> encdec_vxfunct6(funct6) @ vm @ encdec_vreg(vs2) @ encdec_reg(rs1) @ 0b100 @ encdec_vreg(vd) @ 0b1010111
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64 & valid_wide_vxtype(funct6))
-
+$ifndef SYMBOLIC
 function clause execute VXTYPE(funct6, vm, vs2, rs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -531,7 +911,6 @@ function clause execute VXTYPE(funct6, vm, vs2, rs1, vd) = {
     Err(()) => return Illegal_Instruction()
   };
   var result = initial_result;
-
   foreach (i from 0 to (num_elem - 1)) {
     if mask[i] == 0b1 then {
       result[i] = match funct6 {
@@ -590,6 +969,181 @@ function clause execute VXTYPE(funct6, vm, vs2, rs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VXTYPE(funct6, vm, vs2, rs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if illegal_normal(vd, vm) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let rs1_val : bits('m)             = get_scalar(rs1, SEW);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    var sat = 0b0;
+    match funct6 {
+      VX_VADD    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] + rs1_val
+      },
+      VX_VSUB    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] - rs1_val
+      },
+      VX_VRSUB   => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = rs1_val - vs2_val[i]
+      },
+      VX_VAND    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] & rs1_val
+      },
+      VX_VOR     => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] | rs1_val
+      },
+      VX_VXOR    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] ^ rs1_val
+      },
+      VX_VSADDU  => foreach (i from 0 to (num_elem - 1)) {
+        let addend : bits('m + 1) = zero_extend_one_sew(SEW, vs2_val[i]) + zero_extend_one_sew(SEW, rs1_val);
+        body_result[i] = isla_unsigned_saturation_narrow1_result(addend);
+        sat = sat | (mask[i] & isla_unsigned_saturation_narrow1_flag(addend))
+      },
+      VX_VSADD   => foreach (i from 0 to (num_elem - 1)) {
+        let addend : bits('m + 1) = sign_extend_one_sew(SEW, vs2_val[i]) + sign_extend_one_sew(SEW, rs1_val);
+        body_result[i] = isla_signed_saturation_narrow1_result(addend);
+        sat = sat | (mask[i] & isla_signed_saturation_narrow1_flag(addend))
+      },
+      VX_VSSUBU  => foreach (i from 0 to (num_elem - 1)) {
+        let minuend : bits('m + 1) = zero_extend_one_sew(SEW, vs2_val[i]);
+        let subtrahend : bits('m + 1) = zero_extend_one_sew(SEW, rs1_val);
+        let diff : bits('m + 1) = minuend - subtrahend;
+        let zero_val : bits('m) = vs2_val[i] ^ vs2_val[i];
+        let underflow = isla_bool_to_bit_or_default(unsigned(vs2_val[i]) < unsigned(rs1_val));
+        body_result[i] = isla_mux2(underflow, isla_unsigned_saturation_narrow1_result(diff), zero_val)
+      },
+      VX_VSSUB   => foreach (i from 0 to (num_elem - 1)) {
+        let diff : bits('m + 1) = sign_extend_one_sew(SEW, vs2_val[i]) - sign_extend_one_sew(SEW, rs1_val);
+        body_result[i] = isla_signed_saturation_narrow1_result(diff);
+        sat = sat | (mask[i] & isla_signed_saturation_narrow1_flag(diff))
+      },
+      VX_VSMUL   => foreach (i from 0 to (num_elem - 1)) {
+        let result_mul = to_bits_unsafe('m * 2, signed(vs2_val[i]) * signed(rs1_val));
+        let rounding_incr = isla_fixed_rounding_incr(result_mul, SEW - 1, vcsr[vxrm]);
+        let result_wide = isla_add_bit(result_mul >> (SEW - 1), rounding_incr);
+        let result_sat_input : bits('m + 1) = low_sew_plus_one_bits(SEW, result_wide);
+        body_result[i] = isla_signed_saturation_narrow1_result(result_sat_input);
+        sat = sat | (mask[i] & isla_signed_saturation_narrow1_flag(result_sat_input))
+      },
+      VX_VSLL    => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = get_shift_amount(rs1_val, SEW);
+        body_result[i] = vs2_val[i] << shift_amount
+      },
+      VX_VSRL    => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = get_shift_amount(rs1_val, SEW);
+        body_result[i] = vs2_val[i] >> shift_amount
+      },
+      VX_VSRA    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_arith_shiftr(vs2_val[i], shift_amount_bits_sew(SEW, rs1_val))
+      },
+      VX_VSSRL   => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = get_shift_amount(rs1_val, SEW);
+        let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+        body_result[i] = isla_add_bit(vs2_val[i] >> shift_amount, rounding_incr)
+      },
+      VX_VSSRA   => foreach (i from 0 to (num_elem - 1)) {
+        let shift_amount = get_shift_amount(rs1_val, SEW);
+        let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+        body_result[i] = isla_add_bit(isla_arith_shiftr(vs2_val[i], shift_amount_bits_sew(SEW, rs1_val)), rounding_incr)
+      },
+      VX_VMINU   => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_mux2(isla_bool_to_bit_or_default(unsigned(vs2_val[i]) < unsigned(rs1_val)), rs1_val, vs2_val[i])
+      },
+      VX_VMIN    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_mux2(isla_bool_to_bit_or_default(signed(vs2_val[i]) < signed(rs1_val)), rs1_val, vs2_val[i])
+      },
+      VX_VMAXU   => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_mux2(isla_bool_to_bit_or_default(unsigned(vs2_val[i]) < unsigned(rs1_val)), vs2_val[i], rs1_val)
+      },
+      VX_VMAX    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_mux2(isla_bool_to_bit_or_default(signed(vs2_val[i]) < signed(rs1_val)), vs2_val[i], rs1_val)
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result);
+    vcsr[vxsat] = vcsr[vxsat] | sat
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = match funct6 {
+          VX_VADD    => vs2_val[i] + rs1_val,
+          VX_VSUB    => vs2_val[i] - rs1_val,
+          VX_VRSUB   => rs1_val - vs2_val[i],
+          VX_VAND    => vs2_val[i] & rs1_val,
+          VX_VOR     => vs2_val[i] | rs1_val,
+          VX_VXOR    => vs2_val[i] ^ rs1_val,
+          VX_VSADDU  => unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) + zero_extend('m + 1, rs1_val) ),
+          VX_VSADD   => signed_saturation('m, sign_extend('m + 1, vs2_val[i]) + sign_extend('m + 1, rs1_val) ),
+          VX_VSSUBU  => {
+                          if unsigned(vs2_val[i]) < unsigned(rs1_val) then zeros()
+                          else unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) - zero_extend('m + 1, rs1_val) )
+                        },
+          VX_VSSUB   => signed_saturation('m, sign_extend('m + 1, vs2_val[i]) - sign_extend('m + 1, rs1_val) ),
+          VX_VSMUL   => {
+                          let result_mul = to_bits_unsafe('m * 2, signed(vs2_val[i]) * signed(rs1_val));
+                          let rounding_incr = get_fixed_rounding_incr(result_mul, 'm - 1);
+                          let result_wide = (result_mul >> ('m - 1)) + zero_extend('m * 2, rounding_incr);
+                          signed_saturation('m, result_wide['m..0])
+                        },
+          VX_VSLL    => {
+                          let shift_amount = get_shift_amount(rs1_val, SEW);
+                          vs2_val[i] << shift_amount
+                        },
+          VX_VSRL    => {
+                          let shift_amount = get_shift_amount(rs1_val, SEW);
+                          vs2_val[i] >> shift_amount
+                        },
+          VX_VSRA    => {
+                          let shift_amount = get_shift_amount(rs1_val, SEW);
+                          let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
+                          (v_double >> shift_amount)[SEW - 1 .. 0]
+                        },
+          VX_VSSRL   => {
+                          let shift_amount = get_shift_amount(rs1_val, SEW);
+                          let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+                          (vs2_val[i] >> shift_amount) + zero_extend('m, rounding_incr)
+                        },
+          VX_VSSRA   => {
+                          let shift_amount = get_shift_amount(rs1_val, SEW);
+                          let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+                          let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
+                          (v_double >> shift_amount)[SEW - 1 .. 0] + zero_extend('m, rounding_incr)
+                        },
+          VX_VMINU   => to_bits_unsafe(SEW, min(unsigned(vs2_val[i]), unsigned(rs1_val))),
+          VX_VMIN    => to_bits_unsafe(SEW, min(signed(vs2_val[i]), signed(rs1_val))),
+          VX_VMAXU   => to_bits_unsafe(SEW, max(unsigned(vs2_val[i]), unsigned(rs1_val))),
+          VX_VMAX    => to_bits_unsafe(SEW, max(signed(vs2_val[i]), signed(rs1_val)))
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping vxtype_mnemonic : vxfunct6 <-> string = {
   VX_VADD       <-> "vadd.vx",
@@ -631,6 +1185,7 @@ mapping clause encdec = NXSTYPE(funct6, vm, vs2, rs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 16)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 32)
 
+$ifndef SYMBOLIC
 function clause execute NXSTYPE(funct6, vm, vs2, rs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -684,6 +1239,78 @@ function clause execute NXSTYPE(funct6, vm, vs2, rs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute NXSTYPE(funct6, vm, vs2, rs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  let SEW_widen      = SEW * 2;
+  let LMUL_pow_widen = LMUL_pow + 1;
+
+  if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
+      not(valid_reg_overlap(vs2, vd, LMUL_pow_widen, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW_widen <= 64);
+  assert(LMUL_pow_widen <= 3);
+  assert_narrowing_sew(SEW);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
+
+  let 'n = num_elem;
+  let 'm = SEW;
+  let 'o = SEW_widen;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+  let rs1_val : bits('m)             = get_scalar(rs1, SEW);
+  let vs2_val : vector('n, bits('o)) = read_vreg(num_elem, SEW_widen, LMUL_pow_widen, vs2);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    let shift_amount = isla_narrowing_shift_amount(rs1_val);
+    var body_result = initial_result;
+    match funct6 {
+      NXS_VNSRL  => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_low_half(vs2_val[i] >> shift_amount)
+      },
+      NXS_VNSRA  => foreach (i from 0 to (num_elem - 1)) {
+        let v_double : bits('o * 2) = isla_widen_signed(vs2_val[i]);
+        let arith_shifted : bits('o) = isla_low_half(v_double >> shift_amount);
+        body_result[i] = isla_low_half(arith_shifted)
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = match funct6 {
+          NXS_VNSRL  => {
+                          let shift_amount = get_shift_amount(rs1_val, SEW_widen);
+                          (vs2_val[i] >> shift_amount)[SEW - 1 .. 0]
+                        },
+          NXS_VNSRA  => {
+                          let shift_amount = get_shift_amount(rs1_val, SEW_widen);
+                          let v_double : bits('o * 2) = sign_extend(vs2_val[i]);
+                          let arith_shifted : bits('o) = (v_double >> shift_amount)[SEW_widen - 1 .. 0];
+                          arith_shifted[SEW - 1 .. 0]
+                        }
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping nxstype_mnemonic : nxsfunct6 <-> string = {
   NXS_VNSRL       <-> "vnsrl.wx",
@@ -707,6 +1334,7 @@ mapping clause encdec = NXTYPE(funct6, vm, vs2, rs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 16)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 32)
 
+$ifndef SYMBOLIC
 function clause execute NXTYPE(funct6, vm, vs2, rs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -761,6 +1389,87 @@ function clause execute NXTYPE(funct6, vm, vs2, rs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute NXTYPE(funct6, vm, vs2, rs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  let SEW_widen      = SEW * 2;
+  let LMUL_pow_widen = LMUL_pow + 1;
+
+  if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
+      not(valid_reg_overlap(vs2, vd, LMUL_pow_widen, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW_widen <= 64);
+  assert(LMUL_pow_widen <= 3);
+  assert_narrowing_sew(SEW);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
+
+  let 'n = num_elem;
+  let 'm = SEW;
+  let 'o = SEW_widen;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+  let rs1_val : bits('m)             = get_scalar(rs1, SEW);
+  let vs2_val : vector('n, bits('o)) = read_vreg(num_elem, SEW_widen, LMUL_pow_widen, vs2);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    let shift_amount = isla_narrowing_shift_amount(rs1_val);
+    var body_result = initial_result;
+    var sat = 0b0;
+    match funct6 {
+      NX_VNCLIPU => foreach (i from 0 to (num_elem - 1)) {
+        let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+        let result_wide = isla_add_bit(vs2_val[i] >> shift_amount, rounding_incr);
+        body_result[i] = isla_unsigned_saturation_half_result(result_wide);
+        sat = sat | (mask[i] & isla_unsigned_saturation_half_flag(result_wide))
+      },
+      NX_VNCLIP  => foreach (i from 0 to (num_elem - 1)) {
+        let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+        let v_double : bits('m * 4) = isla_widen_signed(vs2_val[i]);
+        let shifted : bits('o) = isla_low_half(v_double >> shift_amount);
+        let result_wide = isla_add_bit(shifted, rounding_incr);
+        body_result[i] = isla_signed_saturation_half_result(result_wide);
+        sat = sat | (mask[i] & isla_signed_saturation_half_flag(result_wide))
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result);
+    vcsr[vxsat] = vcsr[vxsat] | sat
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        let shift_amount = get_shift_amount(rs1_val, SEW_widen);
+        let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+        result[i] = match funct6 {
+          NX_VNCLIPU => {
+                          let result_wide = (vs2_val[i] >> shift_amount) + zero_extend('o, rounding_incr);
+                          unsigned_saturation('m, result_wide)
+                        },
+          NX_VNCLIP  => {
+                          let v_double : bits('m * 4) = sign_extend(vs2_val[i]);
+                          let result_wide = (v_double >> shift_amount)['o - 1 .. 0] + zero_extend('o, rounding_incr);
+                          signed_saturation('m, result_wide)
+                        }
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping nxtype_mnemonic : nxfunct6 <-> string = {
   NX_VNCLIPU     <-> "vnclipu.wx",
@@ -875,7 +1584,7 @@ function clause execute MASKTYPEX(vs2, rs1, vd) = {
   let LMUL_pow      = get_lmul_pow();
   let num_elem      = get_num_elem(LMUL_pow, SEW); // max(VLMAX,VLEN/SEW))
   assert_vector_num_elem(num_elem);
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (0 - LMUL_pow); // VLMAX
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow); // VLMAX
 
   if illegal_vd_masked(vd) |
      not(valid_reg_group(vs2, LMUL_pow)) |
@@ -928,7 +1637,7 @@ function clause execute MOVETYPEX(rs1, vd) = {
   assert_sew(SEW);
   assert_lmul_pow(LMUL_pow);
   let num_elem = get_num_elem(LMUL_pow, SEW);
-  let num_elem = assert_vector_num_elem_value(num_elem);
+  let num_elem = checked_vector_num_elem_value(num_elem);
 
   if illegal_vd_unmasked() | not(valid_reg_group(vd, LMUL_pow))
   then return Illegal_Instruction();
@@ -980,6 +1689,7 @@ mapping clause encdec = VITYPE(funct6, vm, vs2, simm, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
+$ifndef SYMBOLIC
 function clause execute VITYPE(funct6, vm, vs2, simm, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -1049,6 +1759,143 @@ function clause execute VITYPE(funct6, vm, vs2, simm, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VITYPE(funct6, vm, vs2, simm, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  assert_sew(SEW);
+  assert_vector_num_elem(num_elem);
+
+  if illegal_normal(vd, vm) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val   : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let imm_val  : bits('m)             = sign_extend_imm5_sew(SEW, simm);
+  let uimm_val : bits('m)             = zero_extend_imm5_sew(SEW, simm);
+  let vs2_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val   : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    match funct6 {
+      VI_VADD    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] + imm_val
+      },
+      VI_VRSUB   => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = imm_val - vs2_val[i]
+      },
+      VI_VAND    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] & imm_val
+      },
+      VI_VOR     => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] | imm_val
+      },
+      VI_VXOR    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] ^ imm_val
+      },
+      VI_VSADDU  => foreach (i from 0 to (num_elem - 1)) {
+        let addend : bits('m + 1) = zero_extend_one_sew(SEW, vs2_val[i]) + zero_extend_one_sew(SEW, imm_val);
+        body_result[i] = isla_unsigned_saturation_narrow1_result(addend)
+      },
+      VI_VSADD   => foreach (i from 0 to (num_elem - 1)) {
+        let addend : bits('m + 1) = sign_extend_one_sew(SEW, vs2_val[i]) + sign_extend_one_sew(SEW, imm_val);
+        body_result[i] = isla_signed_saturation_narrow1_result(addend)
+      },
+      VI_VSLL    => {
+        let shift_amount = get_shift_amount(uimm_val, SEW);
+        foreach (i from 0 to (num_elem - 1)) {
+          body_result[i] = vs2_val[i] << shift_amount
+        }
+      },
+      VI_VSRL    => {
+        let shift_amount = get_shift_amount(uimm_val, SEW);
+        foreach (i from 0 to (num_elem - 1)) {
+          body_result[i] = vs2_val[i] >> shift_amount
+        }
+      },
+      VI_VSRA    => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_arith_shiftr(vs2_val[i], uimm_val)
+      },
+      VI_VSSRL   => {
+        let shift_amount = get_shift_amount(uimm_val, SEW);
+        foreach (i from 0 to (num_elem - 1)) {
+          let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+          body_result[i] = isla_add_bit(vs2_val[i] >> shift_amount, rounding_incr)
+        }
+      },
+      VI_VSSRA   => {
+        let shift_amount = get_shift_amount(uimm_val, SEW);
+        foreach (i from 0 to (num_elem - 1)) {
+          let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+          body_result[i] = isla_add_bit(isla_arith_shiftr(vs2_val[i], uimm_val), rounding_incr)
+        }
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = match funct6 {
+          VI_VADD    => vs2_val[i] + imm_val,
+          VI_VRSUB   => imm_val - vs2_val[i],
+          VI_VAND    => vs2_val[i] & imm_val,
+          VI_VOR     => vs2_val[i] | imm_val,
+          VI_VXOR    => vs2_val[i] ^ imm_val,
+          VI_VSADDU  => {
+                          let addend : bits('m + 1) = zero_extend_one_sew(SEW, vs2_val[i]) + zero_extend_one_sew(SEW, imm_val);
+                          isla_unsigned_saturation_narrow1_result(addend)
+                        },
+          VI_VSADD   => {
+                          let addend : bits('m + 1) = sign_extend_one_sew(SEW, vs2_val[i]) + sign_extend_one_sew(SEW, imm_val);
+                          isla_signed_saturation_narrow1_result(addend)
+                        },
+          VI_VSLL    => {
+                          let shift_amount = get_shift_amount(uimm_val, SEW);
+                          vs2_val[i] << shift_amount
+                        },
+          VI_VSRL    => {
+                          let shift_amount = get_shift_amount(uimm_val, SEW);
+                          vs2_val[i] >> shift_amount
+                        },
+          VI_VSRA    => {
+                          let shift_amount = get_shift_amount(uimm_val, SEW);
+                          let v_double : bits('m * 2) = sign_extend_double_sew(SEW, vs2_val[i]);
+                          (v_double >> shift_amount)[SEW - 1 .. 0]
+                        },
+          VI_VSSRL   => {
+                          let shift_amount = get_shift_amount(uimm_val, SEW);
+                          let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+                          isla_add_bit(vs2_val[i] >> shift_amount, rounding_incr)
+                        },
+          VI_VSSRA   => {
+                          let shift_amount = get_shift_amount(uimm_val, SEW);
+                          let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+                          let v_double : bits('m * 2) = sign_extend_double_sew(SEW, vs2_val[i]);
+                          isla_add_bit((v_double >> shift_amount)[SEW - 1 .. 0], rounding_incr)
+                        }
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping vitype_mnemonic : vifunct6 <-> string = {
   VI_VADD   <-> "vadd.vi",
@@ -1082,6 +1929,7 @@ mapping clause encdec = NISTYPE(funct6, vm, vs2, uimm, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 16)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 32)
 
+$ifndef SYMBOLIC
 function clause execute NISTYPE(funct6, vm, vs2, uimm, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -1135,6 +1983,78 @@ function clause execute NISTYPE(funct6, vm, vs2, uimm, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute NISTYPE(funct6, vm, vs2, uimm, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  let SEW_widen      = SEW * 2;
+  let LMUL_pow_widen = LMUL_pow + 1;
+
+  if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
+      not(valid_reg_overlap(vs2, vd, LMUL_pow_widen, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW_widen <= 64);
+  assert(LMUL_pow_widen <= 3);
+  assert_narrowing_sew(SEW);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
+
+  let 'n = num_elem;
+  let 'm = SEW;
+  let 'o = SEW_widen;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+  let imm_val : bits('m)             = zero_extend(uimm);
+  let vs2_val : vector('n, bits('o)) = read_vreg(num_elem, SEW_widen, LMUL_pow_widen, vs2);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    let shift_amount = isla_narrowing_shift_amount(imm_val);
+    var body_result = initial_result;
+    match funct6 {
+      NIS_VNSRL  => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = isla_low_half(vs2_val[i] >> shift_amount)
+      },
+      NIS_VNSRA  => foreach (i from 0 to (num_elem - 1)) {
+        let v_double : bits('o * 2) = isla_widen_signed(vs2_val[i]);
+        let arith_shifted : bits('o) = isla_low_half(v_double >> shift_amount);
+        body_result[i] = isla_low_half(arith_shifted)
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = match funct6 {
+          NIS_VNSRL  => {
+                          let shift_amount = get_shift_amount(imm_val, SEW_widen);
+                          (vs2_val[i] >> shift_amount)[SEW - 1 .. 0]
+                        },
+          NIS_VNSRA  => {
+                          let shift_amount = get_shift_amount(imm_val, SEW_widen);
+                          let v_double : bits('o * 2) = sign_extend(vs2_val[i]);
+                          let arith_shifted : bits('o) = (v_double >> shift_amount)[SEW_widen - 1 .. 0];
+                          (arith_shifted)[SEW - 1 .. 0]
+                        }
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping nistype_mnemonic : nisfunct6 <-> string = {
   NIS_VNSRL       <-> "vnsrl.wi",
@@ -1158,6 +2078,7 @@ mapping clause encdec = NITYPE(funct6, vm, vs2, uimm, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 16)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 32)
 
+$ifndef SYMBOLIC
 function clause execute NITYPE(funct6, vm, vs2, uimm, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -1212,6 +2133,87 @@ function clause execute NITYPE(funct6, vm, vs2, uimm, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute NITYPE(funct6, vm, vs2, uimm, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  let SEW_widen      = SEW * 2;
+  let LMUL_pow_widen = LMUL_pow + 1;
+
+  if  illegal_variable_width(vd, vm, SEW_widen, LMUL_pow_widen) |
+      not(valid_reg_overlap(vs2, vd, LMUL_pow_widen, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW_widen <= 64);
+  assert(LMUL_pow_widen <= 3);
+  assert_narrowing_sew(SEW);
+  assert_widened_sew(SEW_widen);
+  assert_widened_lmul_pow(LMUL_pow_widen);
+
+  let 'n = num_elem;
+  let 'm = SEW;
+  let 'o = SEW_widen;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+  let imm_val : bits('m)             = zero_extend(uimm);
+  let vs2_val : vector('n, bits('o)) = read_vreg(num_elem, SEW_widen, LMUL_pow_widen, vs2);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    let shift_amount = isla_narrowing_shift_amount(imm_val);
+    var body_result = initial_result;
+    var sat = 0b0;
+    match funct6 {
+      NI_VNCLIPU => foreach (i from 0 to (num_elem - 1)) {
+        let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+        let result_wide = isla_add_bit(vs2_val[i] >> shift_amount, rounding_incr);
+        body_result[i] = isla_unsigned_saturation_half_result(result_wide);
+        sat = sat | (mask[i] & isla_unsigned_saturation_half_flag(result_wide))
+      },
+      NI_VNCLIP  => foreach (i from 0 to (num_elem - 1)) {
+        let rounding_incr = isla_fixed_rounding_incr(vs2_val[i], shift_amount, vcsr[vxrm]);
+        let v_double : bits('m * 4) = isla_widen_signed(vs2_val[i]);
+        let shifted : bits('o) = isla_low_half(v_double >> shift_amount);
+        let result_wide = isla_add_bit(shifted, rounding_incr);
+        body_result[i] = isla_signed_saturation_half_result(result_wide);
+        sat = sat | (mask[i] & isla_signed_saturation_half_flag(result_wide))
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result);
+    vcsr[vxsat] = vcsr[vxsat] | sat
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        let shift_amount = get_shift_amount(imm_val, SEW_widen);
+        let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+        result[i] = match funct6 {
+          NI_VNCLIPU => {
+                          let result_wide = (vs2_val[i] >> shift_amount) + zero_extend('o, rounding_incr);
+                          unsigned_saturation('m, result_wide)
+                        },
+          NI_VNCLIP  => {
+                          let v_double : bits('m * 4) = sign_extend(vs2_val[i]);
+                          let result_wide = (v_double >> shift_amount)['o - 1 .. 0] + zero_extend('o, rounding_incr);
+                          signed_saturation('m, result_wide)
+                        }
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping nitype_mnemonic : nifunct6 <-> string = {
   NI_VNCLIPU     <-> "vnclipu.wi",
@@ -1325,7 +2327,7 @@ function clause execute MASKTYPEI(vs2, simm, vd) = {
   let SEW           = get_sew();
   let LMUL_pow      = get_lmul_pow();
   let num_elem      = get_num_elem(LMUL_pow, SEW); // max(VLMAX,VLEN/SEW))
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (0 - LMUL_pow); // VLMAX
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow); // VLMAX
 
   if illegal_vd_masked(vd) |
      not(valid_reg_group(vs2, LMUL_pow)) |
@@ -1395,7 +2397,7 @@ function clause execute MASKTYPEI(vs2, simm, vd) = {
   assert_sew(SEW);
   let num_elem      = get_num_elem(LMUL_pow, SEW); // max(VLMAX,VLEN/SEW))
   assert_vector_num_elem(num_elem);
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (0 - LMUL_pow); // VLMAX
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow); // VLMAX
 
   if illegal_vd_masked(vd) |
      not(valid_reg_group(vs2, LMUL_pow)) |
@@ -1433,7 +2435,7 @@ function clause execute MOVETYPEI(vd, simm) = {
   assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
-  let num_elem = assert_vector_num_elem_value(num_elem);
+  let num_elem = checked_vector_num_elem_value(num_elem);
 
   if illegal_vd_unmasked() | not(valid_reg_group(vd, LMUL_pow))
   then return Illegal_Instruction();
@@ -1553,7 +2555,7 @@ mapping clause encdec = MVVTYPE(funct6, vm, vs2, vs1, vd)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64 & valid_wide_mvvtype(funct6))
 
 function clause execute MVVTYPE(funct6, vm, vs2, vs1, vd) = {
-  let SEW      = get_sew();
+  let SEW      = checked_sew_value(get_sew());
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
 
@@ -1677,6 +2679,7 @@ mapping clause encdec = MVVMATYPE(funct6, vm, vs2, vs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
+$ifndef SYMBOLIC
 function clause execute MVVMATYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -1717,6 +2720,67 @@ function clause execute MVVMATYPE(funct6, vm, vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute MVVMATYPE(funct6, vm, vs2, vs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if illegal_normal(vd, vm) |
+     not(valid_reg_group(vs1, LMUL_pow)) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result = initial_result;
+    match funct6 {
+      MVV_VMACC  => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vs2_val[i], Low) + vd_val[i]
+      },
+      MVV_VNMSAC => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vd_val[i] - mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vs2_val[i], Low)
+      },
+      MVV_VMADD  => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vd_val[i], Low) + vs2_val[i]
+      },
+      MVV_VNMSUB => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] - mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vd_val[i], Low)
+      },
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = match funct6 {
+          MVV_VMACC  => mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vs2_val[i], Low) + vd_val[i],
+          MVV_VNMSAC => vd_val[i] - mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vs2_val[i], Low),
+          MVV_VMADD  => mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vd_val[i], Low) + vs2_val[i],
+          MVV_VNMSUB => vs2_val[i] - mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vd_val[i], Low),
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping mvvmatype_mnemonic : mvvmafunct6 <-> string = {
   MVV_VMACC    <-> "vmacc.vv",
@@ -2304,6 +3368,7 @@ mapping clause encdec = MVXMATYPE(funct6, vm, vs2, rs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
+$ifndef SYMBOLIC
 function clause execute MVXMATYPE(funct6, vm, vs2, rs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -2343,6 +3408,66 @@ function clause execute MVXMATYPE(funct6, vm, vs2, rs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute MVXMATYPE(funct6, vm, vs2, rs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if illegal_normal(vd, vm) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let rs1_val : bits('m)             = get_scalar(rs1, SEW);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result = initial_result;
+    match funct6 {
+      MVX_VMACC  => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = mult_to_bits_half(SEW, Signed, Signed, rs1_val, vs2_val[i], Low) + vd_val[i]
+      },
+      MVX_VNMSAC => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vd_val[i] - mult_to_bits_half(SEW, Signed, Signed, rs1_val, vs2_val[i], Low)
+      },
+      MVX_VMADD  => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = mult_to_bits_half(SEW, Signed, Signed, rs1_val, vd_val[i], Low) + vs2_val[i]
+      },
+      MVX_VNMSUB => foreach (i from 0 to (num_elem - 1)) {
+        body_result[i] = vs2_val[i] - mult_to_bits_half(SEW, Signed, Signed, rs1_val, vd_val[i], Low)
+      }
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = match funct6 {
+          MVX_VMACC  => mult_to_bits_half(SEW, Signed, Signed, rs1_val, vs2_val[i], Low) + vd_val[i],
+          MVX_VNMSAC => vd_val[i] - mult_to_bits_half(SEW, Signed, Signed, rs1_val, vs2_val[i], Low),
+          MVX_VMADD  => mult_to_bits_half(SEW, Signed, Signed, rs1_val, vd_val[i], Low) + vs2_val[i],
+          MVX_VNMSUB => vs2_val[i] - mult_to_bits_half(SEW, Signed, Signed, rs1_val, vd_val[i], Low)
+        }
+      }
+    }
+  };
+
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping mvxmatype_mnemonic : mvxmafunct6 <-> string = {
   MVX_VMACC         <-> "vmacc.vx",

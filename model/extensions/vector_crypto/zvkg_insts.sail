@@ -15,6 +15,7 @@ mapping clause encdec = VGHSH_VV(vs2, vs1, vd)
   <-> 0b1011001 @ encdec_vreg(vs2) @ encdec_vreg(vs1) @ 0b010 @ encdec_vreg(vd) @ 0b1110111
   when currentlyEnabled(Ext_Zvkg) & get_sew() == 32 & zvk_check_encdec(128, 4)
 
+$ifndef SYMBOLIC
 function clause execute VGHSH_VV(vs2, vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -59,6 +60,58 @@ function clause execute VGHSH_VV(vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VGHSH_VV(vs2, vs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs1, LMUL_pow)) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vs1_val = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let eg_len   = (unsigned(vl) / 4);
+  let eg_start = (unsigned(vstart) / 4);
+
+  foreach (i from eg_start to (eg_len - 1)) {
+    assert(i * 4 + 3 < num_elem);
+
+    if __isla_use_extra_ops then {
+      let S : bits(128) = brev8(get_velem_quad(vd_val, i) ^ get_velem_quad(vs1_val, i));
+      let H : bits(128) = brev8(get_velem_quad(vs2_val, i));
+      write_velem_quad(vd, SEW, brev8(isla_gcm_mul(S, H)), i)
+    } else {
+      let Y : bits(128) = get_velem_quad(vd_val, i);
+      let X : bits(128) = get_velem_quad(vs1_val, i);
+      var H : bits(128) = brev8(get_velem_quad(vs2_val, i));
+
+      var Z : bits(128) = zeros();
+      let S : bits(128) = brev8(Y ^ X);
+
+      foreach (b from 0 to 127) {
+        if S[b] == 0b1 then Z = Z ^ H;
+
+        let reduce = H[127] == 0b1;
+        H = H << 1;
+        if reduce then H = H[127..8] @ (H[7..0] ^ 0x87);
+      };
+
+      write_velem_quad(vd, SEW, brev8(Z), i)
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = VGHSH_VV(vs2, vs1, vd)
   <-> "vghsh.vv" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ vreg_name(vs1)
@@ -70,6 +123,7 @@ mapping clause encdec = VGMUL_VV(vs2, vd)
   <-> 0b1010001 @ encdec_vreg(vs2) @ 0b10001 @ 0b010 @ encdec_vreg(vd) @ 0b1110111
   when currentlyEnabled(Ext_Zvkg) & get_sew() == 32 & zvk_check_encdec(128, 4)
 
+$ifndef SYMBOLIC
 function clause execute VGMUL_VV(vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -109,6 +163,53 @@ function clause execute VGMUL_VV(vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VGMUL_VV(vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let eg_len   = (unsigned(vl) / 4);
+  let eg_start = (unsigned(vstart) / 4);
+
+  foreach (i from eg_start to (eg_len - 1)) {
+    assert(i * 4 + 3 < num_elem);
+
+    if __isla_use_extra_ops then {
+      let Y : bits(128) = brev8(get_velem_quad(vd_val, i));
+      let H : bits(128) = brev8(get_velem_quad(vs2_val, i));
+      write_velem_quad(vd, SEW, brev8(isla_gcm_mul(Y, H)), i)
+    } else {
+      let Y : bits(128) = brev8(get_velem_quad(vd_val, i));
+      var H : bits(128) = brev8(get_velem_quad(vs2_val, i));
+      var Z : bits(128) = zeros();
+
+      foreach (b from 0 to 127) {
+        if Y[b] == 0b1 then Z = Z ^ H;
+
+        let reduce = H[127] == 0b1;
+        H = H << 1;
+        if reduce then H = H[127..8] @ (H[7..0] ^ 0x87);
+      };
+
+      write_velem_quad(vd, SEW, brev8(Z), i)
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = VGMUL_VV(vs2, vd)
   <-> "vgmul.vv" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2)

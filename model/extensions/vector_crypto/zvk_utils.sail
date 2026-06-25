@@ -7,17 +7,95 @@
 // =======================================================================================
 
 function zvk_valid_reg_overlap(rs : vregidx, rd : vregidx, emul_pow : int) -> bool = {
-  let reg_group_size = if emul_pow > 0 then 2 ^ emul_pow else 1;
+  if emul_pow < -3 | emul_pow > 3 then return false;
+
+  let reg_group_size = checked_lmul_group_size(emul_pow);
   let rs_int = unsigned(vregidx_bits(rs));
   let rd_int = unsigned(vregidx_bits(rd));
   (rs_int + reg_group_size <= rd_int) | (rd_int + reg_group_size <= rs_int)
 }
 
+function zvk_eg_aligned(value : xlenbits, EGS : nat1) -> bool = {
+  match EGS {
+    4 => value[1..0] == 0b00,
+    8 => value[2..0] == 0b000,
+    _ => unsigned(value) % EGS == 0
+  }
+}
+
+function zvk_eg_active(i : nat, eg_start : int, eg_len : int) -> bool =
+  i >= eg_start & i < eg_len
+
+function zvk_eg_active_bit(i : nat, eg_start : int, eg_len : int) -> bits(1) =
+  isla_bool_to_bit_or_default(zvk_eg_active(i, eg_start, eg_len))
+
+val zvk_eg_select : forall 'n, 'n > 0. (nat, int, int, bits('n), bits('n)) -> bits('n)
+$ifndef SYMBOLIC
+function zvk_eg_select(i, eg_start, eg_len, old, new) =
+  if zvk_eg_active(i, eg_start, eg_len) then new else old
+$else
+function zvk_eg_select(i, eg_start, eg_len, old, new) =
+  if __isla_use_extra_ops then isla_mux2(zvk_eg_active_bit(i, eg_start, eg_len), old, new)
+  else if zvk_eg_active(i, eg_start, eg_len) then new else old
+$endif
+
+$ifndef SYMBOLIC
 function zvk_check_encdec(EGW : nat, EGS : nat1) -> bool = {
   let LMUL_pow = get_lmul_pow();
-  let LMUL_times_VLEN = if LMUL_pow < 0 then vlen / (2 ^ abs_int(LMUL_pow)) else (2 ^ LMUL_pow) * vlen in
-  (unsigned(vl) % EGS == 0) & (unsigned(vstart) % EGS == 0) & LMUL_times_VLEN >= EGW
+  let LMUL_times_VLEN : int = match LMUL_pow {
+    -3 => vlen / 8,
+    -2 => vlen / 4,
+    -1 => vlen / 2,
+    0  => vlen,
+    1  => 2 * vlen,
+    2  => 4 * vlen,
+    3  => 8 * vlen,
+    _  => {
+      assert(false);
+      vlen
+    }
+  } in
+  LMUL_times_VLEN >= EGW & zvk_eg_aligned(vl, EGS) & zvk_eg_aligned(vstart, EGS)
 }
+$else
+function zvk_check_encdec_default(EGW : nat, EGS : nat1) -> bool = {
+  let LMUL_pow = get_lmul_pow();
+  let LMUL_times_VLEN : int = match LMUL_pow {
+    -3 => vlen / 8,
+    -2 => vlen / 4,
+    -1 => vlen / 2,
+    0  => vlen,
+    1  => 2 * vlen,
+    2  => 4 * vlen,
+    3  => 8 * vlen,
+    _  => {
+      assert(false);
+      vlen
+    }
+  } in
+  LMUL_times_VLEN >= EGW & zvk_eg_aligned(vl, EGS) & zvk_eg_aligned(vstart, EGS)
+}
+
+function zvk_lmul_vlen_at_least(LMUL_pow : int, EGW : nat) -> bool = {
+  if EGW <= vlen / 8 then true
+  else if EGW <= vlen / 4 then LMUL_pow >= -2
+  else if EGW <= vlen / 2 then LMUL_pow >= -1
+  else if EGW <= vlen then LMUL_pow >= 0
+  else if EGW <= 2 * vlen then LMUL_pow >= 1
+  else if EGW <= 4 * vlen then LMUL_pow >= 2
+  else if EGW <= 8 * vlen then LMUL_pow >= 3
+  else false
+}
+
+function zvk_check_encdec_extra(EGW : nat, EGS : nat1) -> bool = {
+  let LMUL_pow = get_lmul_pow();
+  zvk_lmul_vlen_at_least(LMUL_pow, EGW) & zvk_eg_aligned(vl, EGS) & zvk_eg_aligned(vstart, EGS)
+}
+
+function zvk_check_encdec(EGW : nat, EGS : nat1) -> bool =
+  if __isla_use_extra_ops then zvk_check_encdec_extra(EGW, EGS)
+  else zvk_check_encdec_default(EGW, EGS)
+$endif
 
 // Utility functions for Zvknh[ab]
 // ----------------------------------------------------------------------

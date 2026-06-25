@@ -82,7 +82,36 @@ private function calculate_new_vl(AVL : xlenbits, VLMAX : range(1, vlen)) -> ran
   } else VLMAX
 }
 
+$ifndef SYMBOLIC
+private function calculate_new_vl_bits(AVL : xlenbits, VLMAX : range(1, vlen)) -> xlenbits =
+  to_bits(calculate_new_vl(AVL, VLMAX))
+$else
+private function calculate_new_vl_bits_extra(AVL : xlenbits, VLMAX : range(1, vlen)) -> xlenbits = {
+  let vlmax_bits : xlenbits = to_bits(VLMAX);
+  let twice_vlmax_bits : xlenbits = vlmax_bits << 1;
+  let ceil_avl_half : xlenbits = (AVL + zero_extend(0b1)) >> 1;
+  let mid_vl : xlenbits = if vl_use_ceil then ceil_avl_half else vlmax_bits;
+  let gt_vlmax_vl : xlenbits = isla_mux2(isla_bool_to_bit_or_default(AVL <_u twice_vlmax_bits), vlmax_bits, mid_vl);
+  isla_mux2(isla_bool_to_bit_or_default(AVL <=_u vlmax_bits), gt_vlmax_vl, AVL)
+}
+
+private function calculate_new_vl_bits_from_exp_extra(AVL : xlenbits, vlmax_exp : int) -> xlenbits = {
+  assert(0 <= vlmax_exp & vlmax_exp <= vlen_exp);
+  let vlmax_bits : xlenbits = zero_extend(0b1) << vlmax_exp;
+  let twice_vlmax_bits : xlenbits = vlmax_bits << 1;
+  let ceil_avl_half : xlenbits = (AVL + zero_extend(0b1)) >> 1;
+  let mid_vl : xlenbits = if vl_use_ceil then ceil_avl_half else vlmax_bits;
+  let gt_vlmax_vl : xlenbits = isla_mux2(isla_bool_to_bit_or_default(AVL <_u twice_vlmax_bits), vlmax_bits, mid_vl);
+  isla_mux2(isla_bool_to_bit_or_default(AVL <=_u vlmax_bits), gt_vlmax_vl, AVL)
+}
+
+private function calculate_new_vl_bits(AVL : xlenbits, VLMAX : range(1, vlen)) -> xlenbits =
+  if __isla_use_extra_ops then calculate_new_vl_bits_extra(AVL, VLMAX)
+  else to_bits(calculate_new_vl(AVL, VLMAX))
+$endif
+
 // Execute vsetvl, vsetvli, or vsetivli.
+$ifndef SYMBOLIC
 private function execute_vsetvl_type(
   ma : bits(1),
   ta : bits(1),
@@ -136,6 +165,65 @@ private function execute_vsetvl_type(
 
   RETIRE_SUCCESS
 }
+$else
+private function execute_vsetvl_type(
+  ma : bits(1),
+  ta : bits(1),
+  sew : bits(3),
+  lmul : bits(3),
+  avl : xlenbits,
+  requires_fixed_vlmax : bool,
+  rd : regidx,
+) -> ExecutionResult = {
+  // Check new SEW and LMUL have legal encodings. There are some reserved values.
+  if is_invalid_lmul_pow(lmul) | is_invalid_sew_pow(sew) then {
+    handle_illegal_vtype(rd);
+    return RETIRE_SUCCESS;
+  };
+
+  let LMUL_pow_new = signed(lmul);
+  let SEW_pow_new = unsigned(sew) + 3;
+
+  let lmul_sew_ratio = get_lmul_pow() - get_sew_pow();
+  let lmul_sew_ratio_new = LMUL_pow_new - SEW_pow_new;
+
+  // "For a given supported fractional LMUL setting, implementations must
+  // support SEW settings between SEWMIN and LMUL * ELEN, inclusive."
+  //
+  // Also some cases require that VLMAX doesn't change (i.e. LMUL/SEW is constant).
+  if SEW_pow_new > (LMUL_pow_new + elen_exp) |
+     (requires_fixed_vlmax & (lmul_sew_ratio != lmul_sew_ratio_new | not(valid_vtype()))) then {
+    handle_illegal_vtype(rd);
+    return RETIRE_SUCCESS;
+  };
+
+  let vlmax_exp = LMUL_pow_new + vlen_exp - SEW_pow_new;
+  vl = if __isla_use_extra_ops then {
+    calculate_new_vl_bits_from_exp_extra(avl, vlmax_exp)
+  } else {
+    let VLMAX = 2 ^ vlmax_exp;
+    to_bits(calculate_new_vl(avl, VLMAX))
+  };
+  X(rd) = vl;
+
+  vtype = [Mk_Vtype(zeros()) with
+    vill = 0b0,
+    vma = ma,
+    vta = ta,
+    vsew = sew,
+    vlmul = lmul,
+  ];
+
+  // reset vstart to 0
+  set_vstart(zeros());
+
+  csr_write_callback("vtype", vtype.bits);
+  csr_write_callback("vl", vl);
+  csr_write_callback("vstart", vstart);
+
+  RETIRE_SUCCESS
+}
+$endif
 
 // ********************************** vsetvli ***********************************
 union clause instruction = VSETVLI : (bits(1), bits(1), bits(3), bits(3), regidx, regidx)

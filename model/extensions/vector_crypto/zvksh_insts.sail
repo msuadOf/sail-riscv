@@ -65,6 +65,7 @@ mapping clause encdec = VSM3C_VI(vs2, uimm, vd)
   <-> 0b1010111 @ encdec_vreg(vs2) @ uimm @ 0b010 @ encdec_vreg(vd) @ 0b1110111
   when currentlyEnabled(Ext_Zvksh) & get_sew() == 32 & zvk_check_encdec(256, 8) & zvk_valid_reg_overlap(vs2, vd, get_lmul_pow())
 
+$ifndef SYMBOLIC
 function clause execute VSM3C_VI(vs2, uimm, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -104,6 +105,75 @@ function clause execute VSM3C_VI(vs2, uimm, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VSM3C_VI(vs2, uimm, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+  assert_lmul_pow(LMUL_pow);
+  assert_vector_num_elem(num_elem);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let rnds = unsigned(uimm);
+
+  let eg_len    = (unsigned(vl) / 8);
+  let eg_start  = (unsigned(vstart) / 8);
+  let eg_groups = num_elem / 8;
+  assert(num_elem == eg_groups * 8);
+
+  if __isla_use_extra_ops then {
+    assert(eg_len <= eg_groups);
+
+    foreach (i from 0 to (eg_groups - 1)) {
+      assert(i * 8 + 7 < num_elem);
+
+      let A_H : vector(8, bits(32)) = vrev8(get_velem_oct_vec(vd_val,  i));
+      let w   : vector(8, bits(32)) = vrev8(get_velem_oct_vec(vs2_val, i));
+
+      let x_0 = w[0] ^ w[4];
+      let x_1 = w[1] ^ w[5];
+
+      let A1_H1 = zvk_sm3_round(  A_H, w[0], x_0, 2 * rnds);
+      let A2_H2 = zvk_sm3_round(A1_H1, w[1], x_1, 2 * rnds + 1);
+
+      let out : vector(8, bits(32)) =
+        vrev8(4, [A1_H1[6], A2_H2[6], A1_H1[4], A2_H2[4], A1_H1[2], A2_H2[2], A1_H1[0], A2_H2[0]]);
+      write_velem_quad(vd, SEW,
+        zvk_eg_select(i, eg_start, eg_len, get_velem_quad(vd_val, 2 * i), out[3] @ out[2] @ out[1] @ out[0]), 2 * i);
+      write_velem_quad(vd, SEW,
+        zvk_eg_select(i, eg_start, eg_len, get_velem_quad(vd_val, 2 * i + 1), out[7] @ out[6] @ out[5] @ out[4]), 2 * i + 1);
+    }
+  } else {
+    foreach (i from eg_start to (eg_len - 1)) {
+      assert(i * 8 + 7 < num_elem);
+
+      let A_H : vector(8, bits(32)) = vrev8(get_velem_oct_vec(vd_val,  i));
+      let w   : vector(8, bits(32)) = vrev8(get_velem_oct_vec(vs2_val, i));
+
+      let x_0 = w[0] ^ w[4];
+      let x_1 = w[1] ^ w[5];
+
+      let A1_H1 = zvk_sm3_round(  A_H, w[0], x_0, 2 * rnds);
+      let A2_H2 = zvk_sm3_round(A1_H1, w[1], x_1, 2 * rnds + 1);
+
+      write_velem_oct_vec(vd, SEW,
+        vrev8([A1_H1[6], A2_H2[6], A1_H1[4], A2_H2[4], A1_H1[2], A2_H2[2], A1_H1[0], A2_H2[0]]), i);
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = VSM3C_VI(vs2, uimm, vd)
   <-> "vsm3c.vi" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ hex_bits_5(uimm)

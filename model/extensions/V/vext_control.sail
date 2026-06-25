@@ -35,6 +35,20 @@ function assert_sew(SEW : int) -> unit = {
   }
 }
 
+val checked_sew_value : int -> sew_bitsize
+function checked_sew_value(SEW) = {
+  match SEW {
+    8  => 8,
+    16 => 16,
+    32 => 32,
+    64 => 64,
+    _  => {
+      assert(false);
+      8
+    }
+  }
+}
+
 function assert_lmul_pow(LMUL_pow : int) -> unit = {
   match LMUL_pow {
     -3 => (),
@@ -48,11 +62,68 @@ function assert_lmul_pow(LMUL_pow : int) -> unit = {
   }
 }
 
+val checked_lmul_group_size : int -> {1, 2, 4, 8}
+function checked_lmul_group_size(LMUL_pow) = {
+  match LMUL_pow {
+    -3 => 1,
+    -2 => 1,
+    -1 => 1,
+    0  => 1,
+    1  => 2,
+    2  => 4,
+    3  => 8,
+    _  => {
+      assert(false);
+      1
+    }
+  }
+}
+
+val checked_lmul_real_num_elem : forall 'n, 'n >= 0. (int('n), int) -> int
+function checked_lmul_real_num_elem(num_elem, LMUL_pow) = {
+  match LMUL_pow {
+    -3 => num_elem / 8,
+    -2 => num_elem / 4,
+    -1 => num_elem / 2,
+    0  => num_elem,
+    1  => num_elem,
+    2  => num_elem,
+    3  => num_elem,
+    _  => {
+      assert(false);
+      num_elem
+    }
+  }
+}
+
+val checked_sew_start_bound : int -> int
+function checked_sew_start_bound(SEW_pow) = {
+  match SEW_pow {
+    3 => vlen - 1,
+    4 => vlen / 2 - 1,
+    5 => vlen / 4 - 1,
+    6 => vlen / 8 - 1,
+    _ => {
+      assert(false);
+      0
+    }
+  }
+}
+
 function assert_widened_sew(SEW : int) -> unit = {
   match SEW {
     16 => (),
     32 => (),
     64 => (),
+    _  => assert(false)
+  }
+}
+
+function assert_narrowing_sew(SEW : int) -> unit = {
+  match SEW {
+    8  => (),
+    16 => (),
+    32 => (),
     _  => assert(false)
   }
 }
@@ -95,52 +166,6 @@ function assert_nfields(nf : int) -> unit = {
     7 => (),
     8 => (),
     _ => assert(false)
-  }
-}
-
-function assert_vregidx(r : vregidx) -> vregidx = {
-  let bits = vregidx_bits(r);
-  match bits[4..3] {
-    0b00 => match bits[2..0] {
-      0b000 => Vregidx(0b00000),
-      0b001 => Vregidx(0b00001),
-      0b010 => Vregidx(0b00010),
-      0b011 => Vregidx(0b00011),
-      0b100 => Vregidx(0b00100),
-      0b101 => Vregidx(0b00101),
-      0b110 => Vregidx(0b00110),
-      0b111 => Vregidx(0b00111)
-    },
-    0b01 => match bits[2..0] {
-      0b000 => Vregidx(0b01000),
-      0b001 => Vregidx(0b01001),
-      0b010 => Vregidx(0b01010),
-      0b011 => Vregidx(0b01011),
-      0b100 => Vregidx(0b01100),
-      0b101 => Vregidx(0b01101),
-      0b110 => Vregidx(0b01110),
-      0b111 => Vregidx(0b01111)
-    },
-    0b10 => match bits[2..0] {
-      0b000 => Vregidx(0b10000),
-      0b001 => Vregidx(0b10001),
-      0b010 => Vregidx(0b10010),
-      0b011 => Vregidx(0b10011),
-      0b100 => Vregidx(0b10100),
-      0b101 => Vregidx(0b10101),
-      0b110 => Vregidx(0b10110),
-      0b111 => Vregidx(0b10111)
-    },
-    0b11 => match bits[2..0] {
-      0b000 => Vregidx(0b11000),
-      0b001 => Vregidx(0b11001),
-      0b010 => Vregidx(0b11010),
-      0b011 => Vregidx(0b11011),
-      0b100 => Vregidx(0b11100),
-      0b101 => Vregidx(0b11101),
-      0b110 => Vregidx(0b11110),
-      0b111 => Vregidx(0b11111)
-    }
   }
 }
 
@@ -301,24 +326,101 @@ function assert_vector_num_elem(num_elem : int) -> unit = {
   else assert_vector_num_elem_upto_1024(num_elem)
 }
 
-val assert_vector_num_elem_value : forall 'n, 'n >= 0. int('n) -> int('n)
-function assert_vector_num_elem_value(num_elem) = {
+val checked_vector_num_elem_value : forall 'n, 'n >= 0. int('n) -> int('n)
+function checked_vector_num_elem_value(num_elem) = {
   assert(num_elem <= vlen);
-  match num_elem {
-    1    => 1,
-    2    => 2,
-    4    => 4,
-    8    => 8,
-    16   => 16,
-    32   => 32,
-    64   => 64,
-    128  => 128,
-    256  => 256,
-    512  => 512,
-    1024 => 1024,
-    _    => {
-      assert(false);
-      1
+  if vlen <= 32 then {
+    match num_elem {
+      1  => 1,
+      2  => 2,
+      4  => 4,
+      8  => 8,
+      16 => 16,
+      32 => 32,
+      _  => {
+        assert(false);
+        1
+      }
+    }
+  } else if vlen <= 64 then {
+    match num_elem {
+      1  => 1,
+      2  => 2,
+      4  => 4,
+      8  => 8,
+      16 => 16,
+      32 => 32,
+      64 => 64,
+      _  => {
+        assert(false);
+        1
+      }
+    }
+  } else if vlen <= 128 then {
+    match num_elem {
+      1   => 1,
+      2   => 2,
+      4   => 4,
+      8   => 8,
+      16  => 16,
+      32  => 32,
+      64  => 64,
+      128 => 128,
+      _   => {
+        assert(false);
+        1
+      }
+    }
+  } else if vlen <= 256 then {
+    match num_elem {
+      1   => 1,
+      2   => 2,
+      4   => 4,
+      8   => 8,
+      16  => 16,
+      32  => 32,
+      64  => 64,
+      128 => 128,
+      256 => 256,
+      _   => {
+        assert(false);
+        1
+      }
+    }
+  } else if vlen <= 512 then {
+    match num_elem {
+      1   => 1,
+      2   => 2,
+      4   => 4,
+      8   => 8,
+      16  => 16,
+      32  => 32,
+      64  => 64,
+      128 => 128,
+      256 => 256,
+      512 => 512,
+      _   => {
+        assert(false);
+        1
+      }
+    }
+  } else {
+    match num_elem {
+      1    => 1,
+      2    => 2,
+      4    => 4,
+      8    => 8,
+      16   => 16,
+      32   => 32,
+      64   => 64,
+      128  => 128,
+      256  => 256,
+      512  => 512,
+      1024 => 1024,
+      _    => {
+        assert(false);
+        1
+      }
     }
   }
 }
@@ -333,10 +435,45 @@ function assert_vector_num_elem_value(num_elem) = {
 // true because all elements must be able to fit into a single register
 // at 1-bit per element for masks.
 function get_num_elem(LMUL_pow : LMUL_pow, SEW : sew_bitsize) -> range(1, vlen) = {
-  assert_lmul_pow(LMUL_pow);
-  assert_sew(SEW);
   assert(vlen >= SEW);
-  (2 ^ max(0, LMUL_pow)) * vlen / SEW
+  match SEW {
+    8 => match LMUL_pow {
+      -3 => vlen / 8,
+      -2 => vlen / 8,
+      -1 => vlen / 8,
+      0  => vlen / 8,
+      1  => vlen / 4,
+      2  => vlen / 2,
+      3  => vlen,
+    },
+    16 => match LMUL_pow {
+      -3 => vlen / 16,
+      -2 => vlen / 16,
+      -1 => vlen / 16,
+      0  => vlen / 16,
+      1  => vlen / 8,
+      2  => vlen / 4,
+      3  => vlen / 2,
+    },
+    32 => match LMUL_pow {
+      -3 => vlen / 32,
+      -2 => vlen / 32,
+      -1 => vlen / 32,
+      0  => vlen / 32,
+      1  => vlen / 16,
+      2  => vlen / 8,
+      3  => vlen / 4,
+    },
+    64 => match LMUL_pow {
+      -3 => vlen / 64,
+      -2 => vlen / 64,
+      -1 => vlen / 64,
+      0  => vlen / 64,
+      1  => vlen / 32,
+      2  => vlen / 16,
+      3  => vlen / 8,
+    },
+  }
 }
 
 // Read a single element of a vector register group (starting at vrid).
@@ -367,10 +504,8 @@ val read_vreg : forall 'n 'sew 'p, 'n >= 0 & is_sew_bitsize('sew) . (int('n), in
 function read_vreg(num_elem, SEW, LMUL_pow, vrid) = {
   assert_vector_num_elem(num_elem);
   assert_lmul_pow(LMUL_pow);
-  let vrid = assert_vregidx(vrid);
   let vrid_val = unsigned(vregidx_bits(vrid));
-  let LMUL_pow_reg = if LMUL_pow < 0 then 0 else LMUL_pow;
-  let LMUL = 2 ^ LMUL_pow_reg;
+  let LMUL = checked_lmul_group_size(LMUL_pow);
   let vrid_end = vrid_val + LMUL;
   assert(vrid_end <= 32, "Invalid register group: group " ^ dec_str(vrid_val) ^ " ends at " ^ dec_str(vrid_end) ^ " and overflows the largest register number (32).");
   assert(vrid_val % LMUL == 0, "Invalid register group: group " ^ dec_str(vrid_val) ^ " is not a multiple of its EMUL " ^ dec_str(LMUL) ^ ".");
@@ -390,29 +525,23 @@ val isla_read_vreg = pure "isla_read_vreg" :
 
 val read_vreg_extra : forall 'n 'sew 'p, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), int('p), vregidx) -> vector('n, bits('sew))
 function read_vreg_extra(num_elem, SEW, LMUL_pow, vrid) = {
-  assert_lmul_pow(LMUL_pow);
-  let vrid = assert_vregidx(vrid);
   let vrid_val = unsigned(vregidx_bits(vrid));
-  let LMUL_pow_reg = if LMUL_pow < 0 then 0 else LMUL_pow;
-  let LMUL = 2 ^ LMUL_pow_reg;
+  let LMUL = checked_lmul_group_size(LMUL_pow);
   let vrid_end = vrid_val + LMUL;
   assert(vrid_end <= 32, "Invalid register group: group " ^ dec_str(vrid_val) ^ " ends at " ^ dec_str(vrid_end) ^ " and overflows the largest register number (32).");
   assert(vrid_val % LMUL == 0, "Invalid register group: group " ^ dec_str(vrid_val) ^ " is not a multiple of its EMUL " ^ dec_str(LMUL) ^ ".");
   let zero_vreg : vlenbits = zeros();
 
-  isla_read_vreg(
-    num_elem,
-    SEW,
-    0,
-    V(vrid),
-    if LMUL > 1 then V(vregidx_offset(vrid, 0b00001)) else zero_vreg,
-    if LMUL > 2 then V(vregidx_offset(vrid, 0b00010)) else zero_vreg,
-    if LMUL > 3 then V(vregidx_offset(vrid, 0b00011)) else zero_vreg,
-    if LMUL > 4 then V(vregidx_offset(vrid, 0b00100)) else zero_vreg,
-    if LMUL > 5 then V(vregidx_offset(vrid, 0b00101)) else zero_vreg,
-    if LMUL > 6 then V(vregidx_offset(vrid, 0b00110)) else zero_vreg,
-    if LMUL > 7 then V(vregidx_offset(vrid, 0b00111)) else zero_vreg
-  )
+  match LMUL {
+    1 => isla_read_vreg(num_elem, SEW, 0, V(vrid), zero_vreg, zero_vreg, zero_vreg, zero_vreg, zero_vreg, zero_vreg, zero_vreg),
+    2 => isla_read_vreg(num_elem, SEW, 0, V(vrid), V(vregidx_offset(vrid, 0b00001)), zero_vreg, zero_vreg, zero_vreg, zero_vreg, zero_vreg, zero_vreg),
+    4 => isla_read_vreg(num_elem, SEW, 0, V(vrid), V(vregidx_offset(vrid, 0b00001)), V(vregidx_offset(vrid, 0b00010)), V(vregidx_offset(vrid, 0b00011)), zero_vreg, zero_vreg, zero_vreg, zero_vreg),
+    8 => isla_read_vreg(num_elem, SEW, 0, V(vrid), V(vregidx_offset(vrid, 0b00001)), V(vregidx_offset(vrid, 0b00010)), V(vregidx_offset(vrid, 0b00011)), V(vregidx_offset(vrid, 0b00100)), V(vregidx_offset(vrid, 0b00101)), V(vregidx_offset(vrid, 0b00110)), V(vregidx_offset(vrid, 0b00111))),
+    _ => {
+      assert(false);
+      isla_read_vreg(num_elem, SEW, 0, V(vrid), zero_vreg, zero_vreg, zero_vreg, zero_vreg, zero_vreg, zero_vreg, zero_vreg)
+    }
+  }
 }
 
 val read_vreg_num_elem : forall 'n 'sew 'p, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), int('p), vregidx) -> vector('n, bits('sew))
@@ -423,21 +552,19 @@ function read_vreg_num_elem(num_elem, SEW, LMUL_pow, vrid) = {
 
 val read_vreg_extra_by_sew : forall 'n 'sew 'p, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), int('p), vregidx) -> vector('n, bits('sew))
 function read_vreg_extra_by_sew(num_elem, SEW, LMUL_pow, vrid) = {
-  assert_sew(SEW);
   read_vreg_num_elem(num_elem, SEW, LMUL_pow, vrid)
 }
 
 val isla_pack_vreg = pure "isla_pack_vreg" : forall 'n 'sew, 'n >= 0 & is_sew_bitsize('sew) . (int('sew), int, vector('n, bits('sew))) -> vector(8, vlenbits)
+val isla_pack_vreg_infer_sew = pure "isla_pack_vreg_infer_sew" : forall 'n 'sew, 'n >= 0 & is_sew_bitsize('sew) . (int, vector('n, bits('sew))) -> vector(8, vlenbits)
 
 // The general vreg reading operation with num_elem as max(VLMAX,VLEN/SEW)).
 val read_vreg_default : forall 'n 'sew 'p, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), int('p), vregidx) -> vector('n, bits('sew))
 function read_vreg_default(num_elem, SEW, LMUL_pow, vrid) = {
   assert_vector_num_elem(num_elem);
   assert_lmul_pow(LMUL_pow);
-  let vrid = assert_vregidx(vrid);
   let vrid_val = unsigned(vregidx_bits(vrid));
-  let LMUL_pow_reg = if LMUL_pow < 0 then 0 else LMUL_pow;
-  let LMUL = 2 ^ LMUL_pow_reg;
+  let LMUL = checked_lmul_group_size(LMUL_pow);
   let vrid_end = vrid_val + LMUL;
   assert(vrid_end <= 32, "Invalid register group: group " ^ dec_str(vrid_val) ^ " ends at " ^ dec_str(vrid_end) ^ " and overflows the largest register number (32).");
   assert(vrid_val % LMUL == 0, "Invalid register group: group " ^ dec_str(vrid_val) ^ " is not a multiple of its EMUL " ^ dec_str(LMUL) ^ ".");
@@ -497,9 +624,8 @@ function write_vreg(num_elem, SEW, LMUL_pow, vrid, vec) = {
   assert_vector_num_elem(num_elem);
   assert_sew(SEW);
   assert_lmul_pow(LMUL_pow);
-  let vrid = assert_vregidx(vrid);
   // Number of registers in the group (treating fractional lmul as 0).
-  let group_size = 2 ^ max(LMUL_pow, 0);
+  let group_size = checked_lmul_group_size(LMUL_pow);
 
   assert(SEW <= vlen);
   static_assert(vlen % SEW == 0);
@@ -532,9 +658,8 @@ function write_vreg_default(num_elem, SEW, LMUL_pow, vrid, vec) = {
   assert_vector_num_elem(num_elem);
   assert_sew(SEW);
   assert_lmul_pow(LMUL_pow);
-  let vrid = assert_vregidx(vrid);
   // Number of registers in the group (treating fractional lmul as 0).
-  let group_size = 2 ^ max(LMUL_pow, 0);
+  let group_size = checked_lmul_group_size(LMUL_pow);
 
   assert(SEW <= vlen);
   static_assert(vlen % SEW == 0);
@@ -567,9 +692,13 @@ function write_vreg_extra(num_elem, SEW, LMUL_pow, vrid, vec) = {
   assert_vector_num_elem(num_elem);
   assert_sew(SEW);
   assert_lmul_pow(LMUL_pow);
-  let vrid = assert_vregidx(vrid);
-  let group_size = 2 ^ max(LMUL_pow, 0);
-  let packed : vector(8, vlenbits) = isla_pack_vreg(SEW, vlen, vec);
+  let checked_SEW = checked_sew_value(SEW);
+  let group_size = checked_lmul_group_size(LMUL_pow);
+  assert(checked_SEW <= vlen);
+  static_assert(vlen % checked_SEW == 0);
+  let elem_per_reg = vlen / checked_SEW;
+  assert(num_elem == group_size * elem_per_reg | num_elem == 2 * group_size * elem_per_reg);
+  let packed : vector(8, vlenbits) = isla_pack_vreg_infer_sew(vlen, vec);
   V(vrid) = packed[0];
   if group_size > 1 then V(vrid + 1) = packed[1];
   if group_size > 2 then V(vrid + 2) = packed[2];
@@ -589,16 +718,14 @@ $endif
 // Mask register reading operation with num_elem as max(VLMAX,vlen/SEW)).
 val read_vmask : forall 'n, 0 < 'n <= vlen . (int('n), bits(1), vregidx) -> bits('n)
 function read_vmask(num_elem, vm, vrid) = {
-  assert_vector_num_elem(num_elem);
-  let vrid = assert_vregidx(vrid);
+  let num_elem = checked_vector_num_elem_value(num_elem);
   if vm == 0b1 then ones() else ones('n - num_elem) @ V(vrid)[num_elem - 1 .. 0]
 }
 
 // This is a special version of read_vmask for carry/borrow instructions, where vm=1 means no carry.
 val read_vmask_carry : forall 'n, 0 < 'n <= vlen . (int('n), bits(1), vregidx) -> bits('n)
 function read_vmask_carry(num_elem, vm, vrid) = {
-  assert_vector_num_elem(num_elem);
-  let vrid = assert_vregidx(vrid);
+  let num_elem = checked_vector_num_elem_value(num_elem);
   if vm == 0b1 then zeros() else zeros('n - num_elem) @ V(vrid)[num_elem - 1 .. 0]
 }
 
@@ -607,8 +734,7 @@ val write_vmask : forall 'n, 'n > 0. (int('n), vregidx, bits('n)) -> unit
 function write_vmask(num_elem, vrid, v) = {
   // TODO: This should be part of the type signature.
   assert(0 < num_elem & num_elem <= vlen);
-  assert_vector_num_elem(num_elem);
-  let vrid = assert_vregidx(vrid);
+  let num_elem = checked_vector_num_elem_value(num_elem);
 
   // Mask tail is always agnostic. Currently we always
   // leave it undisturbed.

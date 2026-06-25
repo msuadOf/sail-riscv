@@ -50,6 +50,7 @@ mapping clause encdec = DIV(rs2, rs1, rd, is_unsigned)
   <-> 0b0000001 @ encdec_reg(rs2) @ encdec_reg(rs1) @ 0b10 @ bool_bit(is_unsigned) @ encdec_reg(rd) @ 0b0110011
   when currentlyEnabled(Ext_M)
 
+$ifndef SYMBOLIC
 function clause execute DIV(rs2, rs1, rd, is_unsigned) = {
   let rs1_bits = X(rs1);
   let rs2_bits = X(rs2);
@@ -62,6 +63,25 @@ function clause execute DIV(rs2, rs1, rd, is_unsigned) = {
   X(rd) = to_bits_truncate(quotient);
   RETIRE_SUCCESS
 }
+$else
+function clause execute DIV(rs2, rs1, rd, is_unsigned) = {
+  let rs1_bits = X(rs1);
+  let rs2_bits = X(rs2);
+
+  if __isla_use_extra_ops then {
+    X(rd) = if is_unsigned then isla_divu(rs1_bits, rs2_bits) else isla_divs(rs1_bits, rs2_bits)
+  } else {
+    let rs1_int = if is_unsigned then unsigned(rs1_bits) else signed(rs1_bits);
+    let rs2_int = if is_unsigned then unsigned(rs2_bits) else signed(rs2_bits);
+
+    let quotient = if rs2_int == 0 then -1 else quot_round_zero(rs1_int, rs2_int);
+    // Check for signed overflow.
+    let quotient = if not(is_unsigned) & quotient >= 2 ^ (xlen - 1) then negate(2 ^ (xlen - 1)) else quotient;
+    X(rd) = to_bits_truncate(quotient)
+  };
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = DIV(rs2, rs1, rd, is_unsigned)
   <-> "div" ^ maybe_u(is_unsigned) ^ spc() ^ reg_name(rd) ^ sep() ^ reg_name(rs1) ^ sep() ^ reg_name(rs2)
@@ -117,6 +137,7 @@ mapping clause encdec = DIVW(rs2, rs1, rd, is_unsigned)
   <-> 0b0000001 @ encdec_reg(rs2) @ encdec_reg(rs1) @ 0b10 @ bool_bit(is_unsigned) @ encdec_reg(rd) @ 0b0111011
   when xlen == 64 & currentlyEnabled(Ext_M)
 
+$ifndef SYMBOLIC
 function clause execute DIVW(rs2, rs1, rd, is_unsigned) = {
   let rs1_bits = X(rs1)[31..0];
   let rs2_bits = X(rs2)[31..0];
@@ -129,6 +150,26 @@ function clause execute DIVW(rs2, rs1, rd, is_unsigned) = {
   X(rd) = sign_extend(to_bits_truncate(32, quotient));
   RETIRE_SUCCESS
 }
+$else
+function clause execute DIVW(rs2, rs1, rd, is_unsigned) = {
+  let rs1_bits = X(rs1)[31..0];
+  let rs2_bits = X(rs2)[31..0];
+
+  if __isla_use_extra_ops then {
+    let quotient : bits(32) = if is_unsigned then isla_divu(rs1_bits, rs2_bits) else isla_divs(rs1_bits, rs2_bits);
+    X(rd) = sign_extend(quotient)
+  } else {
+    let rs1_int = if is_unsigned then unsigned(rs1_bits) else signed(rs1_bits);
+    let rs2_int = if is_unsigned then unsigned(rs2_bits) else signed(rs2_bits);
+
+    let quotient = if rs2_int == 0 then -1 else quot_round_zero(rs1_int, rs2_int);
+    // Check for signed overflow.
+    let quotient = if not(is_unsigned) & quotient >= 2 ^ 31 then negate(2 ^ 31) else quotient;
+    X(rd) = sign_extend(to_bits_truncate(32, quotient))
+  };
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = DIVW(rs2, rs1, rd, is_unsigned)
   <-> "div" ^ maybe_u(is_unsigned) ^ "w" ^ spc() ^ reg_name(rd) ^ sep() ^ reg_name(rs1) ^ sep() ^ reg_name(rs2)

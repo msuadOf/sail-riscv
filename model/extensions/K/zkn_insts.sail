@@ -372,6 +372,7 @@ function clause execute AES64ES(rs2, rs1, rd) = {
   RETIRE_SUCCESS
 }
 
+$ifndef SYMBOLIC
 function clause execute AES64DSM(rs2, rs1, rd) = {
   assert(xlen == 64);
   let sr : bits(64) = aes_rv64_shiftrows_inv(X(rs2), X(rs1));
@@ -380,6 +381,18 @@ function clause execute AES64DSM(rs2, rs1, rd) = {
   X(rd) = aes_mixcolumn_inv(sb[63..32]) @ aes_mixcolumn_inv(sb[31..0]);
   RETIRE_SUCCESS
 }
+$else
+function clause execute AES64DSM(rs2, rs1, rd) = {
+  assert(xlen == 64);
+  let sr : bits(64) = aes_rv64_shiftrows_inv(X(rs2), X(rs1));
+  let wd : bits(64) = sr[63..0];
+  let sb : bits(64) = aes_apply_inv_sbox_to_each_byte(wd);
+  X(rd) = if __isla_use_extra_ops
+          then isla_aes_mixcolumns_inv(sb)
+          else aes_mixcolumn_inv(sb[63..32]) @ aes_mixcolumn_inv(sb[31..0]);
+  RETIRE_SUCCESS
+}
+$endif
 
 function clause execute AES64DS(rs2, rs1, rd) = {
   assert(xlen == 64);

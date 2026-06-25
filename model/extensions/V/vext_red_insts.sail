@@ -24,6 +24,7 @@ mapping clause encdec = RIVVTYPE(funct6, vm, vs2, vs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 16)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 32)
 
+$ifndef SYMBOLIC
 function clause execute RIVVTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -70,6 +71,62 @@ function clause execute RIVVTYPE(funct6, vm, vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute RIVVTYPE(funct6, vm, vs2, vs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let SEW_widen = SEW * 2;
+
+  if illegal_widening_reduction(SEW_widen) | not(valid_reg_group(vs2, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW_widen <= 64);
+
+  let num_elem_vs = get_num_elem(LMUL_pow, SEW);
+  let num_elem_vd = get_num_elem(0, SEW_widen); // vd regardless of LMUL setting
+
+  if unsigned(vl) == 0 then return RETIRE_SUCCESS; // if vl=0, no operation is performed
+
+  let 'n = num_elem_vs;
+  let 'd = num_elem_vd;
+  let 'm = SEW;
+  let 'o = SEW_widen;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem_vs, vm, zvreg);
+  let vd_val  : vector('d, bits('o)) = read_vreg(num_elem_vd, SEW_widen, 0, vd);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem_vs, SEW, LMUL_pow, vs2);
+
+  let mask : bits('n) = match init_masked_source(num_elem_vs, LMUL_pow, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+
+  var sum : bits('o) = if __isla_use_extra_ops then isla_low_bits(SEW_widen, V(vs1)) else read_single_element(SEW_widen, 0, vs1); // vs1 regardless of LMUL setting
+  if __isla_use_extra_ops then {
+    sum = match funct6 {
+      IVV_VWREDSUMU  => isla_vwredsumu(mask, sum, vs2_val),
+      IVV_VWREDSUM   => isla_vwredsum(mask, sum, vs2_val)
+    }
+  } else {
+    foreach (i from 0 to (num_elem_vs - 1)) {
+      if mask[i] == 0b1 then {
+        let elem : bits('o) = match funct6 {
+          IVV_VWREDSUMU  => to_bits_unsafe(SEW_widen, unsigned(vs2_val[i])),
+          IVV_VWREDSUM   => to_bits_unsafe(SEW_widen, signed(vs2_val[i]))
+        };
+        sum = sum + elem
+      }
+    }
+  };
+
+  if __isla_use_extra_ops then V(vd) = isla_set_low_bits(SEW_widen, V(vd), sum)
+  else write_single_element(SEW_widen, 0, vd, sum);
+  // other elements in vd are treated as tail elements, currently remain unchanged
+  // TODO: configuration support for agnostic behavior
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping rivvtype_mnemonic : rivvfunct6 <-> string = {
   IVV_VWREDSUMU  <-> "vwredsumu.vs",
@@ -98,6 +155,7 @@ mapping clause encdec = RMVVTYPE(funct6, vm, vs2, vs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
+$ifndef SYMBOLIC
 function clause execute RMVVTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW         = get_sew();
   let LMUL_pow    = get_lmul_pow();
@@ -144,6 +202,84 @@ function clause execute RMVVTYPE(funct6, vm, vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute RMVVTYPE(funct6, vm, vs2, vs1, vd) = {
+  let SEW         = get_sew();
+  let LMUL_pow    = get_lmul_pow();
+  let num_elem_vs = get_num_elem(LMUL_pow, SEW);
+  let num_elem_vd = get_num_elem(0, SEW); // vd regardless of LMUL setting
+
+  if illegal_reduction() | not(valid_reg_group(vs2, LMUL_pow))
+  then return Illegal_Instruction();
+
+  if unsigned(vl) == 0 then return RETIRE_SUCCESS; // if vl=0, no operation is performed
+
+  let 'n = num_elem_vs;
+  let 'd = num_elem_vd;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem_vs, vm, zvreg);
+  let vd_val  : vector('d, bits('m)) = read_vreg(num_elem_vd, SEW, 0, vd);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem_vs, SEW, LMUL_pow, vs2);
+
+  let mask : bits('n) = match init_masked_source(num_elem_vs, LMUL_pow, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+
+  var sum : bits('m) = if __isla_use_extra_ops then isla_low_bits(SEW, V(vs1)) else read_single_element(SEW, 0, vs1); // vs1 regardless of LMUL setting
+  if __isla_use_extra_ops then {
+    match funct6 {
+      MVV_VREDSUM  => foreach (i from 0 to (num_elem_vs - 1)) {
+        sum = isla_mux2(mask[i], sum, sum + vs2_val[i])
+      },
+      MVV_VREDAND  => foreach (i from 0 to (num_elem_vs - 1)) {
+        sum = isla_mux2(mask[i], sum, sum & vs2_val[i])
+      },
+      MVV_VREDOR   => foreach (i from 0 to (num_elem_vs - 1)) {
+        sum = isla_mux2(mask[i], sum, sum | vs2_val[i])
+      },
+      MVV_VREDXOR  => foreach (i from 0 to (num_elem_vs - 1)) {
+        sum = isla_mux2(mask[i], sum, sum ^ vs2_val[i])
+      },
+      MVV_VREDMIN  => foreach (i from 0 to (num_elem_vs - 1)) {
+        sum = isla_mux2(mask[i], sum, to_bits_unsafe(SEW, min(signed(vs2_val[i]), signed(sum))))
+      },
+      MVV_VREDMINU => foreach (i from 0 to (num_elem_vs - 1)) {
+        sum = isla_mux2(mask[i], sum, to_bits_unsafe(SEW, min(unsigned(vs2_val[i]), unsigned(sum))))
+      },
+      MVV_VREDMAX  => foreach (i from 0 to (num_elem_vs - 1)) {
+        sum = isla_mux2(mask[i], sum, to_bits_unsafe(SEW, max(signed(vs2_val[i]), signed(sum))))
+      },
+      MVV_VREDMAXU => foreach (i from 0 to (num_elem_vs - 1)) {
+        sum = isla_mux2(mask[i], sum, to_bits_unsafe(SEW, max(unsigned(vs2_val[i]), unsigned(sum))))
+      }
+    }
+  } else {
+    foreach (i from 0 to (num_elem_vs - 1)) {
+      if mask[i] == 0b1 then {
+        sum = match funct6 {
+          MVV_VREDSUM   => sum + vs2_val[i],
+          MVV_VREDAND   => sum & vs2_val[i],
+          MVV_VREDOR    => sum | vs2_val[i],
+          MVV_VREDXOR   => sum ^ vs2_val[i],
+          MVV_VREDMIN   => to_bits_unsafe(SEW, min(signed(vs2_val[i]), signed(sum))),
+          MVV_VREDMINU  => to_bits_unsafe(SEW, min(unsigned(vs2_val[i]), unsigned(sum))),
+          MVV_VREDMAX   => to_bits_unsafe(SEW, max(signed(vs2_val[i]), signed(sum))),
+          MVV_VREDMAXU  => to_bits_unsafe(SEW, max(unsigned(vs2_val[i]), unsigned(sum)))
+        }
+      }
+    }
+  };
+
+  if __isla_use_extra_ops then V(vd) = isla_set_low_bits(SEW, V(vd), sum)
+  else write_single_element(SEW, 0, vd, sum);
+  // other elements in vd are treated as tail elements, currently remain unchanged
+  // TODO: configuration support for agnostic behavior
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping rmvvtype_mnemonic : rmvvfunct6 <-> string = {
   MVV_VREDSUM   <-> "vredsum.vs",

@@ -19,6 +19,7 @@ mapping clause encdec = VANDN_VV(vm, vs1, vs2, vd)
 mapping clause assembly = VANDN_VV(vm, vs1, vs2, vd)
   <-> "vandn.vv" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ vreg_name(vs1) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VANDN_VV(vm, vs1, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -51,6 +52,49 @@ function clause execute VANDN_VV(vm, vs1, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VANDN_VV(vm, vs1, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+  let num_elem = checked_vector_num_elem_value(num_elem);
+
+  if not(valid_reg_group(vs1, LMUL_pow)) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+
+  var result : vector('n, bits('m)) = initial_result;
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = ~(vs1_val[i]) & vs2_val[i];
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = ~(vs1_val[i]) & vs2_val[i];
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VANDN_VX : (bits(1), vregidx, regidx, vregidx)
 
@@ -104,6 +148,7 @@ mapping clause encdec = VBREV_V(vm, vs2, vd)
 mapping clause assembly = VBREV_V(vm, vs2, vd)
   <-> "vbrev.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VBREV_V(vm, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -138,6 +183,51 @@ function clause execute VBREV_V(vm, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VBREV_V(vm, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+  let num_elem = checked_vector_num_elem_value(num_elem);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result : vector('n, bits('m)) = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = isla_reverse_bits(vs2_val[i])
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        var output : bits('m) = zeros();
+        foreach (j from 0 to (SEW - 1))
+          output[SEW - 1 - j] = vs2_val[i][j];
+        result[i] = output;
+      };
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VBREV8_V : (bits(1), vregidx, vregidx)
 
@@ -149,6 +239,7 @@ mapping clause encdec = VBREV8_V(vm, vs2, vd)
 mapping clause assembly = VBREV8_V(vm, vs2, vd)
   <-> "vbrev8.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VBREV8_V(vm, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -180,6 +271,48 @@ function clause execute VBREV8_V(vm, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VBREV8_V(vm, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+  let num_elem = checked_vector_num_elem_value(num_elem);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+
+  var result : vector('n, bits('m)) = initial_result;
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = brev8(vs2_val[i]);
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = brev8(vs2_val[i]);
+      };
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VREV8_V : (bits(1), vregidx, vregidx)
 
@@ -191,6 +324,7 @@ mapping clause encdec = VREV8_V(vm, vs2, vd)
 mapping clause assembly = VREV8_V(vm, vs2, vd)
   <-> "vrev8.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VREV8_V(vm, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -222,6 +356,44 @@ function clause execute VREV8_V(vm, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VREV8_V(vm, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    let body_result : vector('n, bits('m)) = vrev8(vs2_val);
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = rev8(vs2_val[i]);
+      };
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VCLZ_V : (bits(1), vregidx, vregidx)
 
@@ -233,6 +405,7 @@ mapping clause encdec = VCLZ_V (vm, vs2, vd)
 mapping clause assembly = VCLZ_V (vm, vs2, vd)
   <-> "vclz.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VCLZ_V(vm, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -265,6 +438,48 @@ function clause execute VCLZ_V(vm, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VCLZ_V(vm, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = isla_count_leading_zeros_bits(vs2_val[i]);
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        let clz = count_leading_zeros(vs2_val[i]);
+        result[i] = to_bits(clz);
+      }
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VCTZ_V : (bits(1), vregidx, vregidx)
 
@@ -276,6 +491,7 @@ mapping clause encdec = VCTZ_V (vm, vs2, vd)
 mapping clause assembly = VCTZ_V (vm, vs2, vd)
   <-> "vctz.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VCTZ_V(vm, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -308,6 +524,48 @@ function clause execute VCTZ_V(vm, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VCTZ_V(vm, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = isla_count_trailing_zeros_bits(vs2_val[i]);
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        let ctz = count_trailing_zeros(vs2_val[i]);
+        result[i] = to_bits(ctz);
+      }
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VCPOP_V : (bits(1), vregidx, vregidx)
 
@@ -319,6 +577,7 @@ mapping clause encdec = VCPOP_V (vm, vs2, vd)
 mapping clause assembly = VCPOP_V (vm, vs2, vd)
   <-> "vcpop.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VCPOP_V(vm, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -354,6 +613,52 @@ function clause execute VCPOP_V(vm, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VCPOP_V(vm, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+  let num_elem = checked_vector_num_elem_value(num_elem);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result : vector('n, bits('m)) = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = to_bits_unsafe(SEW, count_ones(vs2_val[i]))
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        foreach (j from 0 to (SEW - 1)) {
+          if vs2_val[i][j] == 0b1 then {
+            result[i] = result[i] + 1;
+          };
+        }
+      };
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VROL_VV : (bits(1), vregidx, vregidx, vregidx)
 
@@ -365,6 +670,7 @@ mapping clause encdec = VROL_VV(vm, vs1, vs2, vd)
 mapping clause assembly = VROL_VV(vm, vs1, vs2, vd)
  <-> "vrol.vv" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ vreg_name(vs1) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VROL_VV(vm, vs1, vs2, vd) = {
   let SEW_pow  = get_sew_pow();
   let SEW      = 2 ^ SEW_pow;
@@ -398,6 +704,49 @@ function clause execute VROL_VV(vm, vs1, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VROL_VV(vm, vs1, vs2, vd) = {
+  let SEW_pow  = get_sew_pow();
+  let SEW      = 2 ^ SEW_pow;
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs1, LMUL_pow)) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = isla_rotate_left(vs2_val[i], vs1_val[i][SEW_pow - 1 .. 0]);
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = vs2_val[i] <<< vs1_val[i][SEW_pow - 1 .. 0];
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VROL_VX : (bits(1), vregidx, regidx, vregidx)
 
@@ -409,6 +758,7 @@ mapping clause encdec = VROL_VX(vm, vs2, rs1, vd)
 mapping clause assembly = VROL_VX(vm, vs2, rs1, vd)
  <-> "vrol.vx" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ reg_name(rs1) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VROL_VX(vm, vs2, rs1, vd) = {
   let SEW_pow  = get_sew_pow();
   let SEW      = 2 ^ SEW_pow;
@@ -441,6 +791,48 @@ function clause execute VROL_VX(vm, vs2, rs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VROL_VX(vm, vs2, rs1, vd) = {
+  let SEW_pow  = get_sew_pow();
+  let SEW      = 2 ^ SEW_pow;
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let rs1_val : bits('m) = get_scalar(rs1, SEW);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = isla_rotate_left(vs2_val[i], rs1_val[SEW_pow - 1 .. 0]);
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = vs2_val[i] <<< rs1_val[SEW_pow - 1 .. 0];
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VROR_VV : (bits(1), vregidx, vregidx, vregidx)
 
@@ -452,6 +844,7 @@ mapping clause encdec = VROR_VV(vm, vs1, vs2, vd)
 mapping clause assembly = VROR_VV(vm, vs1, vs2, vd)
  <-> "vror.vv" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ vreg_name(vs1) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VROR_VV(vm, vs1, vs2, vd) = {
   let SEW_pow  = get_sew_pow();
   let SEW      = 2 ^ SEW_pow;
@@ -485,6 +878,49 @@ function clause execute VROR_VV(vm, vs1, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VROR_VV(vm, vs1, vs2, vd) = {
+  let SEW_pow  = get_sew_pow();
+  let SEW      = 2 ^ SEW_pow;
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs1, LMUL_pow)) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = isla_rotate_right(vs2_val[i], vs1_val[i][SEW_pow - 1 .. 0]);
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = vs2_val[i] >>> vs1_val[i][SEW_pow - 1 .. 0];
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VROR_VX : (bits(1), vregidx, regidx, vregidx)
 
@@ -496,6 +932,7 @@ mapping clause encdec = VROR_VX(vm, vs2, rs1, vd)
 mapping clause assembly = VROR_VX(vm, vs2, rs1, vd)
  <-> "vror.vx" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ reg_name(rs1)^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VROR_VX(vm, vs2, rs1, vd) = {
   let SEW_pow  = get_sew_pow();
   let SEW      = 2 ^ SEW_pow;
@@ -528,6 +965,48 @@ function clause execute VROR_VX(vm, vs2, rs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VROR_VX(vm, vs2, rs1, vd) = {
+  let SEW_pow  = get_sew_pow();
+  let SEW      = 2 ^ SEW_pow;
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let rs1_val : bits('m) = get_scalar(rs1, SEW);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = isla_rotate_right(vs2_val[i], rs1_val[SEW_pow - 1 .. 0]);
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = vs2_val[i] >>> rs1_val[SEW_pow - 1 .. 0];
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VROR_VI : (bits(1), vregidx, bits(6), vregidx)
 
@@ -539,6 +1018,7 @@ mapping clause encdec = VROR_VI(vm, vs2, uimm, vd)
 mapping clause assembly = VROR_VI(vm, vs2, uimm, vd)
  <-> "vror.vi" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ hex_bits_6(uimm) ^ maybe_vmask(vm)
 
+$ifndef SYMBOLIC
 function clause execute VROR_VI(vm, vs2, uimm, vd) = {
   let SEW_pow  = get_sew_pow();
   let SEW      = 2 ^ SEW_pow;
@@ -571,6 +1051,48 @@ function clause execute VROR_VI(vm, vs2, uimm, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VROR_VI(vm, vs2, uimm, vd) = {
+  let SEW_pow  = get_sew_pow();
+  let SEW      = 2 ^ SEW_pow;
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val   : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let uimm_val : bits('m) = zero_extend(uimm);
+  let vs2_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val   : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  if __isla_use_extra_ops then {
+    var body_result : vector('n, bits('m)) = initial_result;
+    foreach (i from 0 to (num_elem - 1)) {
+      body_result[i] = isla_rotate_right(vs2_val[i], uimm_val[SEW_pow - 1 .. 0]);
+    };
+    result = isla_vector_select(mask, initial_result, body_result)
+  } else {
+    foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = vs2_val[i] >>> uimm_val[SEW_pow - 1 .. 0];
+    }
+  };
+  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 union clause instruction = VWSLL_VV : (bits(1), vregidx, vregidx, vregidx)
 

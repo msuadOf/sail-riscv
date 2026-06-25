@@ -8,6 +8,11 @@
 
 function clause currentlyEnabled(Ext_Zbkx) = hartSupports(Ext_Zbkx)
 
+$ifdef SYMBOLIC
+val isla_xperm8 = pure "isla_xperm8" : (xlenbits, xlenbits) -> xlenbits
+val isla_xperm4 = pure "isla_xperm4" : (xlenbits, xlenbits) -> xlenbits
+$endif
+
 // *****************************************************************
 union clause instruction = XPERM8 : (regidx, regidx, regidx)
 
@@ -19,6 +24,7 @@ mapping clause encdec = XPERM8(rs2, rs1, rd)
 mapping clause assembly = XPERM8(rs2, rs1, rd)
   <-> "xperm8" ^ spc() ^ reg_name(rd) ^ sep() ^ reg_name(rs1) ^ sep() ^ reg_name(rs2)
 
+$ifndef SYMBOLIC
 function clause execute XPERM8(rs2, rs1, rd) = {
   let rs1_val = X(rs1);
   let rs2_val = X(rs2);
@@ -32,6 +38,26 @@ function clause execute XPERM8(rs2, rs1, rd) = {
   X(rd) = result;
   RETIRE_SUCCESS
 }
+$else
+function xperm8_default(rs1_val : xlenbits, rs2_val : xlenbits) -> xlenbits = {
+  var result : xlenbits = zeros();
+  foreach (i from 0 to (xlen - 8) by 8) {
+    let index = unsigned(rs2_val[i+7..i]);
+    result[i+7..i] = if 8*index < xlen
+                     then rs1_val[8*index+7..8*index]
+                     else zeros()
+  };
+  result
+}
+
+function clause execute XPERM8(rs2, rs1, rd) = {
+  let rs1_val = X(rs1);
+  let rs2_val = X(rs2);
+  X(rd) = if __isla_use_extra_ops then isla_xperm8(rs1_val, rs2_val)
+          else xperm8_default(rs1_val, rs2_val);
+  RETIRE_SUCCESS
+}
+$endif
 
 // *****************************************************************
 union clause instruction = XPERM4 : (regidx, regidx, regidx)
@@ -44,6 +70,7 @@ mapping clause encdec = XPERM4(rs2, rs1, rd)
 mapping clause assembly = XPERM4(rs2, rs1, rd)
   <-> "xperm4" ^ spc() ^ reg_name(rd) ^ sep() ^ reg_name(rs1) ^ sep() ^ reg_name(rs2)
 
+$ifndef SYMBOLIC
 function clause execute XPERM4(rs2, rs1, rd) = {
   let rs1_val = X(rs1);
   let rs2_val = X(rs2);
@@ -57,3 +84,23 @@ function clause execute XPERM4(rs2, rs1, rd) = {
   X(rd) = result;
   RETIRE_SUCCESS
 }
+$else
+function xperm4_default(rs1_val : xlenbits, rs2_val : xlenbits) -> xlenbits = {
+  var result : xlenbits = zeros();
+  foreach (i from 0 to (xlen - 4) by 4) {
+    let index = unsigned(rs2_val[i+3..i]);
+    result[i+3..i] = if 4*index < xlen
+                     then rs1_val[4*index+3..4*index]
+                     else zeros()
+  };
+  result
+}
+
+function clause execute XPERM4(rs2, rs1, rd) = {
+  let rs1_val = X(rs1);
+  let rs2_val = X(rs2);
+  X(rd) = if __isla_use_extra_ops then isla_xperm4(rs1_val, rs2_val)
+          else xperm4_default(rs1_val, rs2_val);
+  RETIRE_SUCCESS
+}
+$endif

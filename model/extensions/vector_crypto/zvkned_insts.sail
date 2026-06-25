@@ -21,6 +21,7 @@ mapping clause encdec = VAESDF(funct6, vs2, vd)
   when currentlyEnabled(Ext_Zvkned) & get_sew() == 32 & zvk_check_encdec(128, 4) & (funct6 == ZVK_VAESDF_VV |
   zvk_valid_reg_overlap(vs2, vd, get_lmul_pow()))
 
+$ifndef SYMBOLIC
 function clause execute VAESDF(funct6, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -57,6 +58,65 @@ function clause execute VAESDF(funct6, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VAESDF(funct6, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+  assert_lmul_pow(LMUL_pow);
+  assert_vector_num_elem(num_elem);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let eg_len    = (unsigned(vl) / 4);
+  let eg_start  = (unsigned(vstart) / 4);
+  let eg_groups = num_elem / 4;
+  assert(num_elem == eg_groups * 4);
+
+  if __isla_use_extra_ops then {
+    assert(eg_len <= eg_groups);
+    foreach (i from 0 to (eg_groups - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let state = get_velem_quad(vd_val, i);
+      let rkey : bits(128) = isla_mux2(isla_bool_to_bit_or_default(funct6 == ZVK_VAESDF_VV),
+                                        get_velem_quad(vs2_val, 0),
+                                        get_velem_quad(vs2_val, i));
+      let sr  = aes_shift_rows_inv(state);
+      let sb  = isla_aes_subbytes_inv(sr);
+      let ark = sb ^ rkey;
+
+      write_velem_quad(vd, SEW, zvk_eg_select(i, eg_start, eg_len, state, ark), i);
+    }
+  } else {
+    foreach (i from eg_start to (eg_len - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let state = get_velem_quad(vd_val, i);
+      let rkey : bits(128) = match funct6 {
+        ZVK_VAESDF_VV => get_velem_quad(vs2_val, i),
+        ZVK_VAESDF_VS => get_velem_quad(vs2_val, 0),
+      };
+      let sr  = aes_shift_rows_inv(state);
+      let sb  = aes_subbytes_inv(sr);
+      let ark = sb ^ rkey;
+
+      write_velem_quad(vd, SEW, ark, i);
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping vaesdf_mnemonic : zvk_vaesdf_funct6 <-> string = {
   ZVK_VAESDF_VV <-> "vaesdf.vv",
@@ -79,6 +139,7 @@ mapping clause encdec = VAESDM(funct6, vs2, vd)
   when currentlyEnabled(Ext_Zvkned) & get_sew() == 32 & zvk_check_encdec(128, 4) & (funct6 == ZVK_VAESDM_VV |
   zvk_valid_reg_overlap(vs2, vd, get_lmul_pow()))
 
+$ifndef SYMBOLIC
 function clause execute VAESDM(funct6, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -116,6 +177,67 @@ function clause execute VAESDM(funct6, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VAESDM(funct6, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+  assert_lmul_pow(LMUL_pow);
+  assert_vector_num_elem(num_elem);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let eg_len    = (unsigned(vl) / 4);
+  let eg_start  = (unsigned(vstart) / 4);
+  let eg_groups = num_elem / 4;
+  assert(num_elem == eg_groups * 4);
+
+  if __isla_use_extra_ops then {
+    assert(eg_len <= eg_groups);
+    foreach (i from 0 to (eg_groups - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let state = get_velem_quad(vd_val, i);
+      let rkey : bits(128) = isla_mux2(isla_bool_to_bit_or_default(funct6 == ZVK_VAESDM_VV),
+                                        get_velem_quad(vs2_val, 0),
+                                        get_velem_quad(vs2_val, i));
+      let sr    = aes_shift_rows_inv(state);
+      let sb    = isla_aes_subbytes_inv(sr);
+      let ark   = sb ^ rkey;
+      let mix   = isla_aes_mixcolumns_inv(ark);
+
+      write_velem_quad(vd, SEW, zvk_eg_select(i, eg_start, eg_len, state, mix), i);
+    }
+  } else {
+    foreach (i from eg_start to (eg_len - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let state = get_velem_quad(vd_val, i);
+      let rkey : bits(128) = match funct6 {
+        ZVK_VAESDM_VV => get_velem_quad(vs2_val, i),
+        ZVK_VAESDM_VS => get_velem_quad(vs2_val, 0),
+      };
+      let sr    = aes_shift_rows_inv(state);
+      let sb    = aes_subbytes_inv(sr);
+      let ark   = sb ^ rkey;
+      let mix   = aes_mixcolumns_inv(ark);
+
+      write_velem_quad(vd, SEW, mix, i);
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping vaesdm_mnemonic : zvk_vaesdm_funct6 <-> string = {
   ZVK_VAESDM_VV <-> "vaesdm.vv",
@@ -138,6 +260,7 @@ mapping clause encdec = VAESEF(funct6, vs2, vd)
   when currentlyEnabled(Ext_Zvkned) & get_sew() == 32 & zvk_check_encdec(128, 4) & (funct6 == ZVK_VAESEF_VV |
   zvk_valid_reg_overlap(vs2, vd, get_lmul_pow()))
 
+$ifndef SYMBOLIC
 function clause execute VAESEF(funct6, vs2, vd) = {
   let SEW = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -174,6 +297,65 @@ function clause execute VAESEF(funct6, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VAESEF(funct6, vs2, vd) = {
+  let SEW = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+  assert_lmul_pow(LMUL_pow);
+  assert_vector_num_elem(num_elem);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let eg_len    = (unsigned(vl) / 4);
+  let eg_start  = (unsigned(vstart) / 4);
+  let eg_groups = num_elem / 4;
+  assert(num_elem == eg_groups * 4);
+
+  if __isla_use_extra_ops then {
+    assert(eg_len <= eg_groups);
+    foreach (i from 0 to (eg_groups - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let state = get_velem_quad(vd_val, i);
+      let rkey : bits(128) = isla_mux2(isla_bool_to_bit_or_default(funct6 == ZVK_VAESEF_VV),
+                                        get_velem_quad(vs2_val, 0),
+                                        get_velem_quad(vs2_val, i));
+      let sb    = isla_aes_subbytes_fwd(state);
+      let sr    = aes_shift_rows_fwd(sb);
+      let ark   = sr ^ rkey;
+
+      write_velem_quad(vd, SEW, zvk_eg_select(i, eg_start, eg_len, state, ark), i);
+    }
+  } else {
+    foreach (i from eg_start to (eg_len - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let state = get_velem_quad(vd_val, i);
+      let rkey : bits(128) = match funct6 {
+        ZVK_VAESEF_VV => get_velem_quad(vs2_val, i),
+        ZVK_VAESEF_VS => get_velem_quad(vs2_val, 0),
+      };
+      let sb    = aes_subbytes_fwd(state);
+      let sr    = aes_shift_rows_fwd(sb);
+      let ark   = sr ^ rkey;
+
+      write_velem_quad(vd, SEW, ark, i);
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping vaesef_mnemonic : zvk_vaesef_funct6 <-> string = {
   ZVK_VAESEF_VV <-> "vaesef.vv",
@@ -196,6 +378,7 @@ mapping clause encdec = VAESEM(funct6, vs2, vd)
   when currentlyEnabled(Ext_Zvkned) & get_sew() == 32 & zvk_check_encdec(128, 4) & (funct6 == ZVK_VAESEM_VV |
   zvk_valid_reg_overlap(vs2, vd, get_lmul_pow()))
 
+$ifndef SYMBOLIC
 function clause execute VAESEM(funct6, vs2, vd) = {
   let SEW = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -233,6 +416,67 @@ function clause execute VAESEM(funct6, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VAESEM(funct6, vs2, vd) = {
+  let SEW = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+  assert_lmul_pow(LMUL_pow);
+  assert_vector_num_elem(num_elem);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let eg_len    = (unsigned(vl) / 4);
+  let eg_start  = (unsigned(vstart) / 4);
+  let eg_groups = num_elem / 4;
+  assert(num_elem == eg_groups * 4);
+
+  if __isla_use_extra_ops then {
+    assert(eg_len <= eg_groups);
+    foreach (i from 0 to (eg_groups - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let state = get_velem_quad(vd_val, i);
+      let rkey : bits(128) = isla_mux2(isla_bool_to_bit_or_default(funct6 == ZVK_VAESEM_VV),
+                                        get_velem_quad(vs2_val, 0),
+                                        get_velem_quad(vs2_val, i));
+      let sb    = isla_aes_subbytes_fwd(state);
+      let sr    = aes_shift_rows_fwd(sb);
+      let mix   = isla_aes_mixcolumns_fwd(sr);
+      let ark   = mix ^ rkey;
+
+      write_velem_quad(vd, SEW, zvk_eg_select(i, eg_start, eg_len, state, ark), i);
+    }
+  } else {
+    foreach (i from eg_start to (eg_len - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let state = get_velem_quad(vd_val, i);
+      let rkey : bits(128) = match funct6 {
+        ZVK_VAESEM_VV => get_velem_quad(vs2_val, i),
+        ZVK_VAESEM_VS => get_velem_quad(vs2_val, 0),
+      };
+      let sb    = aes_subbytes_fwd(state);
+      let sr    = aes_shift_rows_fwd(sb);
+      let mix   = aes_mixcolumns_fwd(sr);
+      let ark   = mix ^ rkey;
+
+      write_velem_quad(vd, SEW, ark, i);
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping vaesem_mnemonic : zvk_vaesem_funct6 <-> string = {
   ZVK_VAESEM_VV <-> "vaesem.vv",
@@ -249,6 +493,7 @@ mapping clause encdec = VAESKF1_VI(vs2, rnd, vd)
   <-> 0b1000101 @ encdec_vreg(vs2) @ rnd @ 0b010 @ encdec_vreg(vd) @ 0b1110111
   when currentlyEnabled(Ext_Zvkned) & get_sew() == 32 & zvk_check_encdec(128, 4)
 
+$ifndef SYMBOLIC
 function clause execute VAESKF1_VI(vs2, rnd, vd) = {
   let SEW = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -260,6 +505,8 @@ function clause execute VAESKF1_VI(vs2, rnd, vd) = {
 
   assert(SEW == 32);
   assert_sew_32(SEW);
+  assert_lmul_pow(LMUL_pow);
+  assert_vector_num_elem(num_elem);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
@@ -293,6 +540,64 @@ function clause execute VAESKF1_VI(vs2, rnd, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VAESKF1_VI(vs2, rnd, vd) = {
+  let SEW = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  var rnd_val : bits(5) = rnd;
+
+  if (unsigned(rnd_val[3..0]) > 10) | (unsigned(rnd_val[3..0]) == 0)
+  then rnd_val[3] = not_bit(rnd_val[3]);
+
+  let r : bits(4) = rnd_val[3..0] - 1;
+
+  var w : vector(4, bits(32)) = vector_init(zeros());
+
+  let eg_len    = (unsigned(vl) / 4);
+  let eg_start  = (unsigned(vstart) / 4);
+  let eg_groups = num_elem / 4;
+  assert(num_elem == eg_groups * 4);
+
+  if __isla_use_extra_ops then {
+    assert(eg_len <= eg_groups);
+    foreach (i from 0 to (eg_groups - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let new_key = isla_aes_key_schedule_128(get_velem_quad(vs2_val, i), r);
+      write_velem_quad(vd, SEW, zvk_eg_select(i, eg_start, eg_len, get_velem_quad(vd_val, i), new_key), i)
+    }
+  } else {
+    foreach (i from eg_start to (eg_len - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let current_round_key = get_velem_quad_vec(vs2_val, i);
+
+      w[0] = aes_subword_fwd(current_round_key[3] >>> 8) ^
+             aes_decode_rcon(r) ^ current_round_key[0];
+      w[1] = w[0] ^ current_round_key[1];
+      w[2] = w[1] ^ current_round_key[2];
+      w[3] = w[2] ^ current_round_key[3];
+
+      write_velem_quad_vec(vd, SEW, w, i)
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = VAESKF1_VI(vs2, rnd, vd)
   <-> "vaeskf1.vi" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ hex_bits_5(rnd)
@@ -304,6 +609,7 @@ mapping clause encdec = VAESKF2_VI(vs2, rnd, vd)
   <-> 0b101010 @ 0b1 @ encdec_vreg(vs2) @ rnd @ 0b010 @ encdec_vreg(vd) @ 0b1110111
   when currentlyEnabled(Ext_Zvkned) & get_sew() == 32 & zvk_check_encdec(128, 4)
 
+$ifndef SYMBOLIC
 function clause execute VAESKF2_VI(vs2, rnd, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -315,6 +621,8 @@ function clause execute VAESKF2_VI(vs2, rnd, vd) = {
 
   assert(SEW == 32);
   assert_sew_32(SEW);
+  assert_lmul_pow(LMUL_pow);
+  assert_vector_num_elem(num_elem);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
@@ -349,6 +657,66 @@ function clause execute VAESKF2_VI(vs2, rnd, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VAESKF2_VI(vs2, rnd, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  var rnd_val : bits(4) = rnd[3..0];
+
+  if (unsigned(rnd_val) < 2) | (unsigned(rnd_val) > 14)
+  then rnd_val[3] = not_bit(rnd_val[3]);
+
+  var w : vector(4, bits(32)) = vector_init(zeros());
+
+  let eg_len    = (unsigned(vl) / 4);
+  let eg_start  = (unsigned(vstart) / 4);
+  let eg_groups = num_elem / 4;
+  assert(num_elem == eg_groups * 4);
+
+  if __isla_use_extra_ops then {
+    assert(eg_len <= eg_groups);
+    foreach (i from 0 to (eg_groups - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let old_key = get_velem_quad(vd_val, i);
+      let new_key = isla_aes_key_schedule_256(get_velem_quad(vs2_val, i), old_key, rnd_val);
+      write_velem_quad(vd, SEW, zvk_eg_select(i, eg_start, eg_len, old_key, new_key), i)
+    }
+  } else {
+    foreach (i from eg_start to (eg_len - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let current_round_key = get_velem_quad_vec(vs2_val, i);
+      let round_key_b       = get_velem_quad_vec(vd_val, i);
+
+      w[0] = if (rnd_val[0] == 0b1)
+             then aes_subword_fwd(current_round_key[3]) ^ round_key_b[0]
+             else aes_subword_fwd(current_round_key[3] >>> 8) ^
+                  aes_decode_rcon((rnd_val >> 1) - 1) ^ round_key_b[0];
+      w[1] = w[0] ^ round_key_b[1];
+      w[2] = w[1] ^ round_key_b[2];
+      w[3] = w[2] ^ round_key_b[3];
+
+      write_velem_quad_vec(vd, SEW, w, i)
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = VAESKF2_VI(vs2, rnd, vd)
   <-> "vaeskf2.vi" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ hex_bits_5(rnd)
@@ -360,6 +728,7 @@ mapping clause encdec = VAESZ_VS(vs2, vd)
   <-> 0b101001 @ 0b1 @ encdec_vreg(vs2) @ 0b00111 @ 0b010 @ encdec_vreg(vd) @ 0b1110111
   when currentlyEnabled(Ext_Zvkned) & get_sew() == 32 & zvk_check_encdec(128, 4) & zvk_valid_reg_overlap(vs2, vd, get_lmul_pow())
 
+$ifndef SYMBOLIC
 function clause execute VAESZ_VS(vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -391,6 +760,56 @@ function clause execute VAESZ_VS(vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VAESZ_VS(vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW == 32);
+  assert_sew_32(SEW);
+  assert_lmul_pow(LMUL_pow);
+  assert_vector_num_elem(num_elem);
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let eg_len    = (unsigned(vl) / 4);
+  let eg_start  = (unsigned(vstart) / 4);
+  let eg_groups = num_elem / 4;
+  assert(num_elem == eg_groups * 4);
+
+  if __isla_use_extra_ops then {
+    assert(eg_len <= eg_groups);
+    foreach (i from 0 to (eg_groups - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let state = get_velem_quad(vd_val, i);
+      let rkey  = get_velem_quad(vs2_val, 0);
+      let ark   = state ^ rkey;
+
+      write_velem_quad(vd, SEW, zvk_eg_select(i, eg_start, eg_len, state, ark), i)
+    }
+  } else {
+    foreach (i from eg_start to (eg_len - 1)) {
+      assert(i * 4 + 3 < num_elem);
+
+      let state = get_velem_quad(vd_val, i);
+      let rkey  = get_velem_quad(vs2_val, 0);
+      let ark   = state ^ rkey;
+
+      write_velem_quad(vd, SEW, ark, i)
+    }
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = VAESZ_VS(vs2, vd)
   <-> "vaesz.vs" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2)

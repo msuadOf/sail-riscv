@@ -1340,7 +1340,7 @@ function clause execute VFMERGE(vs2, rs1, vd) = {
   let SEW           = get_sew();
   let LMUL_pow      = get_lmul_pow();
   let num_elem      = get_num_elem(LMUL_pow, SEW); // max(VLMAX,VLEN/SEW))
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (0 - LMUL_pow); // VLMAX
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow); // VLMAX
 
   if illegal_fp_vd_masked(vd, SEW, rm_3b) |
      not(valid_reg_group(vs2, LMUL_pow)) |

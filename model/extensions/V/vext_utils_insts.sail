@@ -33,7 +33,7 @@ function valid_vtype() -> bool = {
 }
 
 // Check for vstart value
-function assert_vstart(i : int) -> bool = {
+function vstart_eq(i : int) -> bool = {
   unsigned(vstart) == i
 }
 
@@ -49,8 +49,17 @@ function valid_rd_mask(rd : vregidx, vm : bits(1)) -> bool = {
 // Check that a vector register number for a vector register group is
 // a multiple of its EMUL. Fractional EMULs are rounded up to 1.
 function valid_reg_group(r : vregidx, EMUL_pow : int) -> bool = {
-  let reg_group_size = if EMUL_pow > 0 then 2 ^ EMUL_pow else 1;
-  unsigned(vregidx_bits(r)) % reg_group_size == 0
+  let bits = vregidx_bits(r);
+  match EMUL_pow {
+    -3 => true,
+    -2 => true,
+    -1 => true,
+    0  => true,
+    1  => bits[0] == 0b0,
+    2  => bits[1..0] == 0b00,
+    3  => bits[2..0] == 0b000,
+    _  => false
+  }
 }
 
 // For whole register loads/stores: "The nf field encodes how many
@@ -69,20 +78,22 @@ function valid_whole_register(r : vregidx, nf : nfields_pow2) -> bool = {
 // of the source register group.
 // This also checks that the source and destination register groups are valid.
 function valid_reg_overlap(rs : vregidx, rd : vregidx, EMUL_pow_rs : int, EMUL_pow_rd : int) -> bool = {
-  let rs_group = if EMUL_pow_rs > 0 then 2 ^ EMUL_pow_rs else 1;
-  let rd_group = if EMUL_pow_rd > 0 then 2 ^ EMUL_pow_rd else 1;
+  if EMUL_pow_rs < -3 | EMUL_pow_rs > 3 | EMUL_pow_rd < -3 | EMUL_pow_rd > 3
+  then return false;
+
+  let rs_group = checked_lmul_group_size(EMUL_pow_rs);
+  let rd_group = checked_lmul_group_size(EMUL_pow_rd);
   let rs_int = unsigned(vregidx_bits(rs));
   let rd_int = unsigned(vregidx_bits(rd));
 
-  if rs_int % rs_group != 0 | rd_int % rd_group != 0
-  then return false;
-
-  if EMUL_pow_rs < EMUL_pow_rd then {
+  if rs_int % rs_group != 0 | rd_int % rd_group != 0 then {
+    false
+  } else if EMUL_pow_rs < EMUL_pow_rd then {
     (rs_int + rs_group <= rd_int) | (rs_int >= rd_int + rd_group) |
     ((rs_int + rs_group == rd_int + rd_group) & (EMUL_pow_rs >= 0))
   } else if EMUL_pow_rs > EMUL_pow_rd then {
     (rd_int <= rs_int) | (rd_int >= rs_int + rs_group)
-  } else true;
+  } else true
 }
 
 // Check for valid register grouping in vector segment load/store instructions:
@@ -181,19 +192,19 @@ function illegal_vd_unmasked() -> bool = {
 //   2. vector integer extension: vzext, vsext
 //   3. vector crypto extension: zvbb
 function illegal_variable_width(vd : vregidx, vm : bits(1), SEW_new : int, LMUL_pow_new : int) -> bool = {
-  not(valid_vtype()) | not(valid_rd_mask(vd, vm)) | not(valid_eew_emul(SEW_new, LMUL_pow_new))
+  not(valid_eew_emul(SEW_new, LMUL_pow_new)) | not(valid_rd_mask(vd, vm)) | not(valid_vtype())
 }
 
 // e. Normal check for reduction instructions:
 //  The destination vector register can overlap the source operands, including the mask register.
 //  Vector reduction operations raise an illegal instruction exception if vstart is non-zero.
 function illegal_reduction() -> bool = {
-  not(valid_vtype()) | not(assert_vstart(0))
+  not(valid_vtype()) | not(vstart_eq(0))
 }
 
 // f. Variable width check for widening reduction instructions
 function illegal_widening_reduction(EEW : int) -> bool = {
-  not(valid_vtype()) | not(assert_vstart(0)) | not(EEW >= 8 & EEW <= elen)
+  not(valid_vtype()) | not(vstart_eq(0)) | not(EEW >= 8 & EEW <= elen)
 }
 
 // g. Non-indexed load instruction check
@@ -220,6 +231,7 @@ function illegal_indexed_store(nf : nfields, EEW_index : int, EMUL_pow_index : i
 }
 
 // Scalar register shaping
+$ifndef SYMBOLIC
 val get_scalar : forall 'm, 'm >= 8. (regidx, int('m)) -> bits('m)
 function get_scalar(rs1, SEW) = {
   assert_sew(SEW);
@@ -231,12 +243,45 @@ function get_scalar(rs1, SEW) = {
     sign_extend(SEW, X(rs1))
   }
 }
+$else
+val get_scalar_default : forall 'm, 'm >= 8. (regidx, int('m)) -> bits('m)
+function get_scalar_default(rs1, SEW) = {
+  assert_sew(SEW);
+  if SEW <= xlen then {
+    // Least significant SEW bits
+    X(rs1)[SEW - 1 .. 0]
+  } else {
+    // Sign extend to SEW
+    sign_extend(SEW, X(rs1))
+  }
+}
+
+val get_scalar_extra : forall 'm, 'm >= 8. (regidx, int('m)) -> bits('m)
+function get_scalar_extra(rs1, SEW) = {
+  match SEW {
+    8  => X(rs1)[7 .. 0],
+    16 => X(rs1)[15 .. 0],
+    32 => X(rs1)[31 .. 0],
+    64 => if 64 <= xlen then X(rs1)[63 .. 0] else sign_extend(64, X(rs1)),
+    _  => {
+      assert(false);
+      zeros()
+    }
+  }
+}
+
+val get_scalar : forall 'm, 'm >= 8. (regidx, int('m)) -> bits('m)
+function get_scalar(rs1, SEW) =
+  if __isla_use_extra_ops then get_scalar_extra(rs1, SEW)
+  else get_scalar_default(rs1, SEW)
+$endif
 
 // Extracts 4 consecutive vector elements starting from index 4*i and returns a bitvector
 val get_velem_quad : forall 'n 'm 'p, 'n > 0 & 'm > 0 & 'p >= 0 & 4 * 'p + 3 < 'n. (vector('n, bits('m)), int('p)) -> bits(4 * 'm)
 function get_velem_quad(v, i) = v[4 * i + 3] @ v[4 * i + 2] @ v[4 * i + 1] @ v[4 * i]
 
 // Divide the input bitvector into 4 equal slices and store them in vd starting at position 4*i
+$ifndef SYMBOLIC
 val write_velem_quad : forall 'n, 'n > 0 . (vregidx, sew_bitsize, bits('n), nat) -> unit
 function write_velem_quad(vd, SEW, input, i) = {
   assert_sew(SEW);
@@ -245,6 +290,39 @@ function write_velem_quad(vd, SEW, input, i) = {
     write_single_element(SEW, 4 * i + j, vd, input[(j + 1) * SEW - 1 .. j * SEW])
   }
 }
+$else
+val write_velem_quad : forall 'n, 'n > 0 . (vregidx, sew_bitsize, bits('n), nat) -> unit
+function write_velem_quad(vd, SEW, input, i) = {
+  if __isla_use_extra_ops & 'n == 128 & SEW == 32 & vlen >= 128 then {
+    let elem_per_reg = vlen / 32;
+    let first_index = 4 * i;
+    let reg_in_group = first_index / elem_per_reg;
+    let elem_index = first_index % elem_per_reg;
+    let offset = elem_index * 32;
+    assert(offset + 127 < vlen);
+    let vr = vregidx_offset(vd, to_bits_unsafe(5, reg_in_group));
+    V(vr) = [V(vr) with (offset + 127) .. offset = input]
+  } else {
+    let SEW = checked_sew_value(SEW);
+    if __isla_use_extra_ops & 'n == 4 * SEW & vlen >= 4 * SEW then {
+      assert('n == 4 * SEW);
+      let elem_per_reg = vlen / SEW;
+      let first_index = 4 * i;
+      let reg_in_group = first_index / elem_per_reg;
+      let elem_index = first_index % elem_per_reg;
+      let offset = elem_index * SEW;
+      assert(offset + 4 * SEW - 1 < vlen);
+      let vr = vregidx_offset(vd, to_bits_unsafe(5, reg_in_group));
+      V(vr) = [V(vr) with (offset + 4 * SEW - 1) .. offset = input]
+    } else {
+      foreach(j from 0 to 3) {
+        assert((j + 1) * SEW <= 'n);
+        write_single_element(SEW, 4 * i + j, vd, input[(j + 1) * SEW - 1 .. j * SEW])
+      }
+    }
+  }
+}
+$endif
 
 // Extracts 8 consecutive vector elements starting from index 8*i and returns a
 // vector. The parameter n is implicit to help proof the proof assistant
@@ -253,22 +331,47 @@ val get_velem_oct_vec : forall 'n 'm 'p, 'n > 0 & 8 <= 'm <= 64 & 'p >= 0 & 8 * 
 function get_velem_oct_vec(_n, v, i) = [ v[8 * i + 7], v[8 * i + 6], v[8 * i + 5], v[8 * i + 4], v[8 * i + 3], v[8 * i + 2], v[8 * i + 1], v[8 * i] ]
 
 // Writes each of the 8 elements from the input vector to the vector register vd, starting at position 8 * i
+$ifndef SYMBOLIC
 val write_velem_oct_vec : forall 'n, is_sew_bitsize('n) . (vregidx, int('n), vector(8, bits('n)), nat) -> unit
 function write_velem_oct_vec(vd, SEW, input, i) = {
   foreach(j from 0 to 7)
     write_single_element(SEW, 8 * i + j, vd, input[j]);
 }
+$else
+val write_velem_oct_vec : forall 'n, is_sew_bitsize('n) . (vregidx, int('n), vector(8, bits('n)), nat) -> unit
+function write_velem_oct_vec(vd, SEW, input, i) = {
+  if __isla_use_extra_ops then {
+    write_velem_quad(vd, SEW, input[3] @ input[2] @ input[1] @ input[0], 2 * i);
+    write_velem_quad(vd, SEW, input[7] @ input[6] @ input[5] @ input[4], 2 * i + 1)
+  } else {
+    foreach(j from 0 to 7)
+      write_single_element(SEW, 8 * i + j, vd, input[j]);
+  }
+}
+$endif
 
 // Extracts 4 consecutive vector elements starting from index 4*i and returns a vector
 val get_velem_quad_vec : forall 'n 'm 'p, 'n > 0 & 8 <= 'm <= 64  & 'p >= 0 & 4 * 'p + 3 < 'n. (vector('n, bits('m)), int('p)) -> vector(4, bits('m))
 function get_velem_quad_vec(v, i) = [ v[4 * i + 3], v[4 * i + 2], v[4 * i + 1], v[4 * i] ]
 
 // Writes each of the 4 elements from the input vector to the vector register vd, starting at position 4 * i
+$ifndef SYMBOLIC
 val write_velem_quad_vec : forall 'p 'n, is_sew_bitsize('n) & 'p >= 0. (vregidx, int('n), vector(4, bits('n)), int('p)) -> unit
 function write_velem_quad_vec(vd, SEW, input, i) = {
   foreach(j from 0 to 3)
     write_single_element(SEW, 4 * i + j, vd, input[j]);
 }
+$else
+val write_velem_quad_vec : forall 'p 'n, is_sew_bitsize('n) & 'p >= 0. (vregidx, int('n), vector(4, bits('n)), int('p)) -> unit
+function write_velem_quad_vec(vd, SEW, input, i) = {
+  if __isla_use_extra_ops then {
+    write_velem_quad(vd, SEW, input[3] @ input[2] @ input[1] @ input[0], i)
+  } else {
+    foreach(j from 0 to 3)
+      write_single_element(SEW, 4 * i + j, vd, input[j]);
+  }
+}
+$endif
 
 // Get the starting element index from csr vtype
 function get_start_element() -> result(nat, unit) = {
@@ -279,7 +382,7 @@ function get_start_element() -> result(nat, unit) = {
   //
   // TODO: the bound here might be incorrect.
   // See https://github.com/riscv/sail-riscv/pull/755#discussion_r2035095825
-  if start_element > (2 ^ (3 + vlen_exp - SEW_pow) - 1)
+  if start_element > checked_sew_start_bound(SEW_pow)
   then Err(())
   else Ok(start_element)
 }
@@ -310,7 +413,7 @@ function init_masked_result(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
   var result : vector('n, bits('m)) = undefined;
 
   // Determine the actual number of elements when lmul < 1
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
   assert(num_elem >= real_num_elem);
 
   foreach (i from 0 to (num_elem - 1)) {
@@ -365,7 +468,7 @@ function init_masked_result_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = 
   let end_element   = get_end_element();
 
   // Determine the actual number of elements when lmul < 1
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
   assert(num_elem >= real_num_elem);
 
   let tail_ag : agtype = get_vtype_vta();
@@ -410,14 +513,15 @@ function init_masked_result_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = 
 
 val init_masked_result : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), int('p), vector('n, bits('m)), bits('n)) -> result((vector('n, bits('m)), bits('n)), unit)
 function init_masked_result(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
-  assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
+    assert_vector_num_elem(num_elem);
+    assert_lmul_pow(LMUL_pow);
     let start_element : nat = match get_start_element() {
       Ok(v)   => v,
       Err(()) => return Err(())
     };
     let end_element   = get_end_element();
-    let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+    let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
     assert(num_elem >= real_num_elem);
     Ok((vd_val, isla_init_mask(num_elem, start_element, end_element, real_num_elem, vm_val)))
   } else {
@@ -430,6 +534,7 @@ $endif
 // masks on prestart, inactive and tail elements only affect the validation of source register elements
 // (vs3 for store and vs2 for reduction). There's no destination register to be masked.
 // In these cases, this function can be called to simply get the mask vector for vs (without the prepared vd result vector).
+$ifndef SYMBOLIC
 val init_masked_source : forall 'n 'p, 'n > 0. (int('n), int('p), bits('n)) -> result(bits('n), unit)
 function init_masked_source(num_elem, LMUL_pow, vm_val) = {
   assert_vector_num_elem(num_elem);
@@ -442,7 +547,44 @@ function init_masked_source(num_elem, LMUL_pow, vm_val) = {
   var mask : bits('n) = undefined;
 
   // Determine the actual number of elements when lmul < 1
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
+  assert(num_elem >= real_num_elem);
+
+  foreach (i from 0 to (num_elem - 1)) {
+    if i < start_element then {
+      // Prestart elements defined by vstart
+      mask[i] = 0b0
+    } else if i > end_element then {
+      // Tail elements defined by vl
+      mask[i] = 0b0
+    } else if i >= real_num_elem then {
+      // Tail elements defined by lmul < 1
+      mask[i] = 0b0
+    } else if vm_val[i] == 0b0 then {
+      // Inactive body elements defined by vm
+      mask[i] = 0b0
+    } else {
+      // Active body elements
+      mask[i] = 0b1;
+    }
+  };
+
+  Ok(mask)
+}
+$else
+val init_masked_source_default : forall 'n 'p, 'n > 0. (int('n), int('p), bits('n)) -> result(bits('n), unit)
+function init_masked_source_default(num_elem, LMUL_pow, vm_val) = {
+  assert_vector_num_elem(num_elem);
+  assert_lmul_pow(LMUL_pow);
+  let start_element : nat = match get_start_element() {
+    Ok(v)   => v,
+    Err(()) => return Err(())
+  };
+  let end_element   = get_end_element();
+  var mask : bits('n) = undefined;
+
+  // Determine the actual number of elements when lmul < 1
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
   assert(num_elem >= real_num_elem);
 
   foreach (i from 0 to (num_elem - 1)) {
@@ -467,6 +609,25 @@ function init_masked_source(num_elem, LMUL_pow, vm_val) = {
   Ok(mask)
 }
 
+val init_masked_source : forall 'n 'p, 'n > 0. (int('n), int('p), bits('n)) -> result(bits('n), unit)
+function init_masked_source(num_elem, LMUL_pow, vm_val) = {
+  if __isla_use_extra_ops then {
+    assert_vector_num_elem(num_elem);
+    assert_lmul_pow(LMUL_pow);
+    let start_element : nat = match get_start_element() {
+      Ok(v)   => v,
+      Err(()) => return Err(())
+    };
+    let end_element   = get_end_element();
+    let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
+    assert(num_elem >= real_num_elem);
+    Ok(isla_init_mask(num_elem, start_element, end_element, real_num_elem, vm_val))
+  } else {
+    init_masked_source_default(num_elem, LMUL_pow, vm_val)
+  }
+}
+$endif
+
 // Mask handling for carry functions that use masks as input/output
 // Only prestart and tail elements are masked in a mask value
 $ifndef SYMBOLIC
@@ -483,7 +644,7 @@ function init_masked_result_carry(num_elem, _EEW, LMUL_pow, vd_val) = {
   var result : bits('n) = undefined;
 
   // Determine the actual number of elements when lmul < 1
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
   assert(num_elem >= real_num_elem);
 
   foreach (i from 0 to (num_elem - 1)) {
@@ -521,7 +682,7 @@ function init_masked_result_carry_default(num_elem, _EEW, LMUL_pow, vd_val) = {
   let end_element   = get_end_element();
 
   // Determine the actual number of elements when lmul < 1
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
   assert(num_elem >= real_num_elem);
 
   var mask : bits('n) = undefined;
@@ -553,14 +714,15 @@ function init_masked_result_carry_default(num_elem, _EEW, LMUL_pow, vd_val) = {
 
 val init_masked_result_carry : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n)) -> result((bits('n), bits('n)), unit)
 function init_masked_result_carry(num_elem, EEW, LMUL_pow, vd_val) = {
-  assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
+    assert_vector_num_elem(num_elem);
+    assert_lmul_pow(LMUL_pow);
     let start_element : nat = match get_start_element() {
       Ok(v)   => v,
       Err(()) => return Err(())
     };
     let end_element   = get_end_element();
-    let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+    let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
     assert(num_elem >= real_num_elem);
     Ok((vd_val, isla_init_mask(num_elem, start_element, end_element, real_num_elem, ones())))
   } else {
@@ -585,7 +747,7 @@ function init_masked_result_cmp(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
   var result : bits('n) = undefined;
 
   // Determine the actual number of elements when lmul < 1
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
   assert(num_elem >= real_num_elem);
 
   foreach (i from 0 to (num_elem - 1)) {
@@ -630,7 +792,7 @@ function init_masked_result_cmp_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val
   let end_element   = get_end_element();
 
   // Determine the actual number of elements when lmul < 1
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
   assert(num_elem >= real_num_elem);
 
   let mask_ag : agtype = get_vtype_vma();
@@ -670,14 +832,15 @@ function init_masked_result_cmp_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val
 
 val init_masked_result_cmp : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n), bits('n)) -> result((bits('n), bits('n)), unit)
 function init_masked_result_cmp(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
-  assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
+    assert_vector_num_elem(num_elem);
+    assert_lmul_pow(LMUL_pow);
     let start_element : nat = match get_start_element() {
       Ok(v)   => v,
       Err(()) => return Err(())
     };
     let end_element   = get_end_element();
-    let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+    let real_num_elem = checked_lmul_real_num_elem(num_elem, LMUL_pow);
     assert(num_elem >= real_num_elem);
     Ok((vd_val, isla_init_mask(num_elem, start_element, end_element, real_num_elem, vm_val)))
   } else {
@@ -722,7 +885,170 @@ function get_shift_amount(bit_val, SEW) = {
   unsigned(bit_val[lowlog2bits - 1 .. 0]);
 }
 
+$ifndef SYMBOLIC
+val shift_amount_bits_sew : forall 'm, is_sew_bitsize('m). (int('m), bits('m)) -> bits('m)
+function shift_amount_bits_sew(SEW, value) = {
+  assert_sew(SEW);
+  match SEW {
+    8  => zeros(5)  @ value[2 .. 0],
+    16 => zeros(12) @ value[3 .. 0],
+    32 => zeros(27) @ value[4 .. 0],
+    64 => zeros(58) @ value[5 .. 0]
+  }
+}
+$else
+val shift_amount_bits_sew : forall 'm, is_sew_bitsize('m). (int('m), bits('m)) -> bits('m)
+function shift_amount_bits_sew(SEW, value) =
+  if __isla_use_extra_ops then isla_shift_amount_bits(value)
+  else {
+    assert_sew(SEW);
+    match SEW {
+      8  => zeros(5)  @ value[2 .. 0],
+      16 => zeros(12) @ value[3 .. 0],
+      32 => zeros(27) @ value[4 .. 0],
+      64 => zeros(58) @ value[5 .. 0]
+    }
+  }
+$endif
+
+$ifndef SYMBOLIC
+val low_sew_plus_one_bits : forall 'm, is_sew_bitsize('m). (int('m), bits(2 * 'm)) -> bits('m + 1)
+function low_sew_plus_one_bits(SEW, value) = {
+  match SEW {
+    8  => value[8  .. 0],
+    16 => value[16 .. 0],
+    32 => value[32 .. 0],
+    64 => value[64 .. 0]
+  }
+}
+$else
+val low_sew_plus_one_bits : forall 'm, is_sew_bitsize('m). (int('m), bits(2 * 'm)) -> bits('m + 1)
+function low_sew_plus_one_bits(SEW, value) =
+  if __isla_use_extra_ops then isla_low_half_plus_one(value)
+  else {
+    match SEW {
+      8  => value[8  .. 0],
+      16 => value[16 .. 0],
+      32 => value[32 .. 0],
+      64 => value[64 .. 0]
+    }
+  }
+$endif
+
+val sign_extend_sew : forall 'm 'n, is_sew_bitsize('m) & 'n <= 'm. (int('m), bits('n)) -> bits('m)
+function sign_extend_sew(SEW, value) = {
+  assert_sew(SEW);
+  match SEW {
+    8  => sign_extend(8, value),
+    16 => sign_extend(16, value),
+    32 => sign_extend(32, value),
+    64 => sign_extend(64, value)
+  }
+}
+
+val zero_extend_sew : forall 'm 'n, is_sew_bitsize('m) & 'n <= 'm. (int('m), bits('n)) -> bits('m)
+function zero_extend_sew(SEW, value) = {
+  assert_sew(SEW);
+  match SEW {
+    8  => zero_extend(8, value),
+    16 => zero_extend(16, value),
+    32 => zero_extend(32, value),
+    64 => zero_extend(64, value)
+  }
+}
+
+val sign_extend_imm5_sew : forall 'm, is_sew_bitsize('m). (int('m), bits(5)) -> bits('m)
+function sign_extend_imm5_sew(SEW, value) = {
+  assert_sew(SEW);
+  match SEW {
+    8  => (if value[4] == 0b1 then ones(3)  else zeros(3))  @ value,
+    16 => (if value[4] == 0b1 then ones(11) else zeros(11)) @ value,
+    32 => (if value[4] == 0b1 then ones(27) else zeros(27)) @ value,
+    64 => (if value[4] == 0b1 then ones(59) else zeros(59)) @ value
+  }
+}
+
+val zero_extend_imm5_sew : forall 'm, is_sew_bitsize('m). (int('m), bits(5)) -> bits('m)
+function zero_extend_imm5_sew(SEW, value) = {
+  assert_sew(SEW);
+  match SEW {
+    8  => zeros(3)  @ value,
+    16 => zeros(11) @ value,
+    32 => zeros(27) @ value,
+    64 => zeros(59) @ value
+  }
+}
+
+$ifndef SYMBOLIC
+val zero_extend_one_sew : forall 'm, is_sew_bitsize('m). (int('m), bits('m)) -> bits('m + 1)
+function zero_extend_one_sew(SEW, value) = {
+  assert_sew(SEW);
+  0b0 @ value
+}
+$else
+val zero_extend_one_sew : forall 'm, is_sew_bitsize('m). (int('m), bits('m)) -> bits('m + 1)
+function zero_extend_one_sew(SEW, value) =
+  if __isla_use_extra_ops then isla_zero_extend_one(value)
+  else {
+    assert_sew(SEW);
+    0b0 @ value
+  }
+$endif
+
+$ifndef SYMBOLIC
+val sign_extend_one_sew : forall 'm, is_sew_bitsize('m). (int('m), bits('m)) -> bits('m + 1)
+function sign_extend_one_sew(SEW, value) = {
+  assert_sew(SEW);
+  match SEW {
+    8  => value[7]  @ value,
+    16 => value[15] @ value,
+    32 => value[31] @ value,
+    64 => value[63] @ value
+  }
+}
+$else
+val sign_extend_one_sew : forall 'm, is_sew_bitsize('m). (int('m), bits('m)) -> bits('m + 1)
+function sign_extend_one_sew(SEW, value) =
+  if __isla_use_extra_ops then isla_sign_extend_one(value)
+  else {
+    assert_sew(SEW);
+    match SEW {
+      8  => value[7]  @ value,
+      16 => value[15] @ value,
+      32 => value[31] @ value,
+      64 => value[63] @ value
+    }
+  }
+$endif
+
+$ifndef SYMBOLIC
+val sign_extend_double_sew : forall 'm, is_sew_bitsize('m). (int('m), bits('m)) -> bits('m * 2)
+function sign_extend_double_sew(SEW, value) = {
+  assert_sew(SEW);
+  match SEW {
+    8  => (if value[7]  == 0b1 then ones(8)  else zeros(8))  @ value,
+    16 => (if value[15] == 0b1 then ones(16) else zeros(16)) @ value,
+    32 => (if value[31] == 0b1 then ones(32) else zeros(32)) @ value,
+    64 => (if value[63] == 0b1 then ones(64) else zeros(64)) @ value
+  }
+}
+$else
+val sign_extend_double_sew : forall 'm, is_sew_bitsize('m). (int('m), bits('m)) -> bits('m * 2)
+function sign_extend_double_sew(SEW, value) =
+  if __isla_use_extra_ops then isla_widen_signed(value)
+  else {
+    assert_sew(SEW);
+    match SEW {
+      8  => (if value[7]  == 0b1 then ones(8)  else zeros(8))  @ value,
+      16 => (if value[15] == 0b1 then ones(16) else zeros(16)) @ value,
+      32 => (if value[31] == 0b1 then ones(32) else zeros(32)) @ value,
+      64 => (if value[63] == 0b1 then ones(64) else zeros(64)) @ value
+    }
+  }
+$endif
+
 // Fixed point rounding increment
+$ifndef SYMBOLIC
 val get_fixed_rounding_incr : forall ('m 'n : Int), ('m > 0 & 'n >= 0). (bits('m), int('n)) -> bits(1)
 function get_fixed_rounding_incr(vec_elem, shift_amount) = {
   if shift_amount == 0 then 0b0
@@ -743,6 +1069,33 @@ function get_fixed_rounding_incr(vec_elem, shift_amount) = {
     }
   }
 }
+$else
+val get_fixed_rounding_incr_default : forall ('m 'n : Int), ('m > 0 & 'n >= 0). (bits('m), int('n)) -> bits(1)
+function get_fixed_rounding_incr_default(vec_elem, shift_amount) = {
+  if shift_amount == 0 then 0b0
+  else {
+    let rounding_mode = vcsr[vxrm];
+    // TODO: Change the type signature to enforce this assertion.
+    assert(shift_amount < 'm);
+    match rounding_mode {
+      0b00 => vec_elem[shift_amount - 1],
+      0b01 => {
+        bool_to_bit(
+          vec_elem[shift_amount - 1] == 0b1 &
+          ((if shift_amount == 1 then false else vec_elem[shift_amount - 2 .. 0] != zeros()) | vec_elem[shift_amount] == 0b1))
+      },
+      0b10 => 0b0,
+      0b11 => bool_to_bit(
+        vec_elem[shift_amount] != 0b1 & vec_elem[shift_amount - 1 .. 0] != zeros())
+    }
+  }
+}
+
+val get_fixed_rounding_incr : forall ('m 'n : Int), ('m > 0 & 'n >= 0). (bits('m), int('n)) -> bits(1)
+function get_fixed_rounding_incr(vec_elem, shift_amount) =
+  if __isla_use_extra_ops then isla_fixed_rounding_incr(vec_elem, shift_amount, vcsr[vxrm])
+  else get_fixed_rounding_incr_default(vec_elem, shift_amount)
+$endif
 
 // Fixed point unsigned saturation
 val unsigned_saturation : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> bits('m)

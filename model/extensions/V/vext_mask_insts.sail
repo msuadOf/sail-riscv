@@ -48,22 +48,17 @@ function clause execute MMTYPE(funct6, vs2, vs1, vd) = {
     Ok(v)   => v,
     Err(()) => return Illegal_Instruction()
   };
-  var result = initial_result;
-
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
-        MM_VMAND     => (vs2_val & vs1_val)[i],
-        MM_VMNAND    => ~(vs2_val & vs1_val)[i],
-        MM_VMANDN    => (vs2_val & ~(vs1_val))[i],
-        MM_VMXOR     => (vs2_val ^ vs1_val)[i],
-        MM_VMOR      => (vs2_val | vs1_val)[i],
-        MM_VMNOR     => (~(vs2_val | vs1_val))[i],
-        MM_VMORN     => (vs2_val | ~(vs1_val))[i],
-        MM_VMXNOR    => (~(vs2_val ^ vs1_val))[i]
-      }
-    }
+  let body : bits('n) = match funct6 {
+    MM_VMAND  => vs2_val & vs1_val,
+    MM_VMNAND => ~(vs2_val & vs1_val),
+    MM_VMANDN => vs2_val & ~(vs1_val),
+    MM_VMXOR  => vs2_val ^ vs1_val,
+    MM_VMOR   => vs2_val | vs1_val,
+    MM_VMNOR  => ~(vs2_val | vs1_val),
+    MM_VMORN  => vs2_val | ~(vs1_val),
+    MM_VMXNOR => ~(vs2_val ^ vs1_val)
   };
+  let result = (initial_result & ~(mask)) | (body & mask);
 
   write_vmask(num_elem, vd, result);
   set_vstart(zeros());
@@ -97,7 +92,7 @@ function clause execute VCPOP_M(vm, vs2, rd) = {
   let LMUL_pow = get_lmul_pow();
   let num_elem = vlen;
 
-  if illegal_vd_unmasked() | not(assert_vstart(0)) then return Illegal_Instruction();
+  if illegal_vd_unmasked() | not(vstart_eq(0)) then return Illegal_Instruction();
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -110,10 +105,7 @@ function clause execute VCPOP_M(vm, vs2, rd) = {
     Err(()) => return Illegal_Instruction()
   };
 
-  var count : nat = 0;
-  foreach (i from 0 to (num_elem - 1)) {
-    if (mask & vs2_val)[i] == 0b1 then count = count + 1;
-  };
+  let count = count_ones(mask & vs2_val);
 
   X(rd) = to_bits_unsafe(xlen, count);
   set_vstart(zeros());
@@ -136,7 +128,7 @@ function clause execute VFIRST_M(vm, vs2, rd) = {
   let LMUL_pow = get_lmul_pow();
   let num_elem = vlen;
 
-  if illegal_vd_unmasked() | not(assert_vstart(0)) then return Illegal_Instruction();
+  if illegal_vd_unmasked() | not(vstart_eq(0)) then return Illegal_Instruction();
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -149,14 +141,10 @@ function clause execute VFIRST_M(vm, vs2, rd) = {
     Err(()) => return Illegal_Instruction()
   };
 
-  var index : int = -1;
-  foreach (i from 0 to (num_elem - 1)) {
-    if index == -1 then {
-      if (mask & vs2_val)[i] == 0b1 then index = i;
-    };
-  };
-
-  X(rd) = to_bits_unsafe(xlen, index);
+  let active = mask & vs2_val;
+  X(rd) = if active == zeros()
+          then ones()
+          else to_bits(count_trailing_zeros(active));
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
@@ -177,7 +165,7 @@ function clause execute VMSBF_M(vm, vs2, vd) = {
   let LMUL_pow = get_lmul_pow();
   let num_elem = vlen;
 
-  if illegal_normal(vd, vm) | not(assert_vstart(0)) | vd == vs2
+  if illegal_normal(vd, vm) | not(vstart_eq(0)) | vd == vs2
   then return Illegal_Instruction();
 
   let 'n = num_elem;
@@ -191,15 +179,13 @@ function clause execute VMSBF_M(vm, vs2, vd) = {
     Ok(v)   => v,
     Err(()) => return Illegal_Instruction()
   };
-  var result = initial_result;
-
-  var found_elem : bool = false;
+  let active = mask & vs2_val;
+  var body : bits('n) = zeros();
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      if vs2_val[i] == 0b1 then found_elem = true;
-      result[i] = bool_to_bit(not(found_elem))
-    }
+    let before_or_at_first = active[i .. 0] == zeros(i + 1);
+    body[i] = isla_bool_to_bit_or_default(before_or_at_first)
   };
+  let result = (initial_result & ~(mask)) | (body & mask);
 
   write_vmask(num_elem, vd, result);
   set_vstart(zeros());
@@ -222,7 +208,7 @@ function clause execute VMSIF_M(vm, vs2, vd) = {
   let LMUL_pow = get_lmul_pow();
   let num_elem = vlen;
 
-  if illegal_normal(vd, vm) | not(assert_vstart(0)) | vd == vs2
+  if illegal_normal(vd, vm) | not(vstart_eq(0)) | vd == vs2
   then return Illegal_Instruction();
 
   let 'n = num_elem;
@@ -236,15 +222,13 @@ function clause execute VMSIF_M(vm, vs2, vd) = {
     Ok(v)   => v,
     Err(()) => return Illegal_Instruction()
   };
-  var result = initial_result;
-
-  var found_elem : bool = false;
+  let active = mask & vs2_val;
+  var body : bits('n) = zeros();
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = bool_to_bit(not(found_elem));
-      if vs2_val[i] == 0b1 then found_elem = true
-    }
+    let before_first = if i == 0 then true else active[i - 1 .. 0] == zeros(i);
+    body[i] = isla_bool_to_bit_or_default(before_first)
   };
+  let result = (initial_result & ~(mask)) | (body & mask);
 
   write_vmask(num_elem, vd, result);
   set_vstart(zeros());
@@ -262,12 +246,13 @@ mapping clause encdec = VMSOF_M(vm, vs2, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
+$ifndef SYMBOLIC
 function clause execute VMSOF_M(vm, vs2, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
   let num_elem = vlen;
 
-  if illegal_normal(vd, vm) | not(assert_vstart(0)) | vd == vs2
+  if illegal_normal(vd, vm) | not(vstart_eq(0)) | vd == vs2
   then return Illegal_Instruction();
 
   let 'n = num_elem;
@@ -299,6 +284,46 @@ function clause execute VMSOF_M(vm, vs2, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute VMSOF_M(vm, vs2, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = vlen;
+
+  if illegal_normal(vd, vm) | not(vstart_eq(0)) | vd == vs2
+  then return Illegal_Instruction();
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n) = read_vmask(num_elem, vm, zvreg);
+  let vs2_val : bits('n) = read_vmask(num_elem, 0b0, vs2);
+  let vd_val  : bits('n) = read_vmask(num_elem, 0b0, vd);
+
+  let (initial_result, mask) : (bits('n), bits('n)) = match init_masked_result_cmp(num_elem, SEW, 0, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  let active = mask & vs2_val;
+  let body : bits('n) = if __isla_use_extra_ops then {
+    isla_first_set_bit(active)
+  } else {
+    var default_body : bits('n) = zeros();
+    foreach (i from 0 to (num_elem - 1)) {
+      let first = if i == 0
+                  then active[i] == 0b1
+                  else (active[i] == 0b1) & (active[i - 1 .. 0] == zeros(i));
+      default_body[i] = isla_bool_to_bit_or_default(first)
+    };
+    default_body
+  };
+  let result = (initial_result & ~(mask)) | body;
+
+  write_vmask(num_elem, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif
 
 mapping clause assembly = VMSOF_M(vm, vs2, vd)
   <-> "vmsof.m" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ maybe_vmask(vm)
@@ -317,7 +342,7 @@ function clause execute VIOTA_M(vm, vs2, vd) = {
   let num_elem = get_num_elem(LMUL_pow, SEW);
 
   if illegal_normal(vd, vm) |
-     not(assert_vstart(0)) |
+     not(vstart_eq(0)) |
      not(valid_reg_group(vd, LMUL_pow)) |
      vd == vs2
   then return Illegal_Instruction();
@@ -335,12 +360,11 @@ function clause execute VIOTA_M(vm, vs2, vd) = {
   };
   var result = initial_result;
 
-  var sum : int = 0;
+  let active = mask & vs2_val;
+  var sum : bits('m) = zeros();
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = to_bits_unsafe(SEW, sum);
-      if vs2_val[i] == 0b1 then sum = sum + 1
-    }
+    result[i] = mux2(mask[i], result[i], sum);
+    sum = sum + zero_extend('m, active[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -379,8 +403,11 @@ function clause execute VID_V(vm, vd) = {
   };
   var result = initial_result;
 
+  let one : bits('m) = zero_extend('m, 0b1);
+  var index : bits('m) = zeros();
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then result[i] = to_bits_unsafe(SEW, i)
+    result[i] = mux2(mask[i], result[i], index);
+    index = index + one
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);

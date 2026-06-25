@@ -50,14 +50,16 @@ function clause execute VVMTYPE(funct6, vs2, vs1, vd) = {
     Err(()) => return Illegal_Instruction()
   };
   var result = initial_result;
+  let max_elem = unsigned(ones('m));
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      let res : bool = match funct6 {
-        VVM_VMADC    => unsigned(vs2_val[i]) + unsigned(vs1_val[i]) + (if vm_val[i] == 0b1 then 1 else 0) > 2 ^ SEW - 1,
-        VVM_VMSBC    => unsigned(vs2_val[i]) - unsigned(vs1_val[i]) - (if vm_val[i] == 0b1 then 1 else 0) < 0
-      };
-      result[i] = bool_to_bit(res)
+  match funct6 {
+    VVM_VMADC => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) + unsigned(vs1_val[i]) + unsigned(vm_val[i]) > max_elem;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VVM_VMSBC => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) - unsigned(vs1_val[i]) - unsigned(vm_val[i]) < 0;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
     }
   };
 
@@ -112,14 +114,16 @@ function clause execute VVMCTYPE(funct6, vs2, vs1, vd) = {
     Err(()) => return Illegal_Instruction()
   };
   var result = initial_result;
+  let max_elem = unsigned(ones('m));
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      let res : bool = match funct6 {
-        VVMC_VMADC    => unsigned(vs2_val[i]) + unsigned(vs1_val[i]) > 2 ^ SEW - 1,
-        VVMC_VMSBC    => unsigned(vs2_val[i]) - unsigned(vs1_val[i]) < 0
-      };
-      result[i] = bool_to_bit(res)
+  match funct6 {
+    VVMC_VMADC => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) + unsigned(vs1_val[i]) > max_elem;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VVMC_VMSBC => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) - unsigned(vs1_val[i]) < 0;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
     }
   };
 
@@ -180,12 +184,16 @@ function clause execute VVMSTYPE(funct6, vs2, vs1, vd) = {
   };
   var result = initial_result;
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
-        VVMS_VADC     => to_bits_unsafe(SEW, unsigned(vs2_val[i]) + unsigned(vs1_val[i]) + (if vm_val[i] == 0b1 then 1 else 0)),
-        VVMS_VSBC     => to_bits_unsafe(SEW, unsigned(vs2_val[i]) - unsigned(vs1_val[i]) - (if vm_val[i] == 0b1 then 1 else 0))
-      }
+  match funct6 {
+    VVMS_VADC => foreach (i from 0 to (num_elem - 1)) {
+      let carry : bits('m) = zero_extend('m, vm_val[i]);
+      let elem : bits('m) = vs2_val[i] + vs1_val[i] + carry;
+      result[i] = mux2(mask[i], result[i], elem)
+    },
+    VVMS_VSBC => foreach (i from 0 to (num_elem - 1)) {
+      let carry : bits('m) = zero_extend('m, vm_val[i]);
+      let elem : bits('m) = vs2_val[i] - vs1_val[i] - carry;
+      result[i] = mux2(mask[i], result[i], elem)
     }
   };
 
@@ -244,17 +252,30 @@ function clause execute VVCMPTYPE(funct6, vm, vs2, vs1, vd) = {
   };
   var result = initial_result;
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      let res : bool = match funct6 {
-        VVCMP_VMSEQ    => vs2_val[i] == vs1_val[i],
-        VVCMP_VMSNE    => vs2_val[i] != vs1_val[i],
-        VVCMP_VMSLTU   => unsigned(vs2_val[i]) < unsigned(vs1_val[i]),
-        VVCMP_VMSLT    => signed(vs2_val[i]) < signed(vs1_val[i]),
-        VVCMP_VMSLEU   => unsigned(vs2_val[i]) <= unsigned(vs1_val[i]),
-        VVCMP_VMSLE    => signed(vs2_val[i]) <= signed(vs1_val[i])
-      };
-      result[i] = bool_to_bit(res)
+  match funct6 {
+    VVCMP_VMSEQ  => foreach (i from 0 to (num_elem - 1)) {
+      let res = vs2_val[i] == vs1_val[i];
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VVCMP_VMSNE  => foreach (i from 0 to (num_elem - 1)) {
+      let res = vs2_val[i] != vs1_val[i];
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VVCMP_VMSLTU => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) < unsigned(vs1_val[i]);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VVCMP_VMSLT  => foreach (i from 0 to (num_elem - 1)) {
+      let res = signed(vs2_val[i]) < signed(vs1_val[i]);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VVCMP_VMSLEU => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) <= unsigned(vs1_val[i]);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VVCMP_VMSLE  => foreach (i from 0 to (num_elem - 1)) {
+      let res = signed(vs2_val[i]) <= signed(vs1_val[i]);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
     }
   };
 
@@ -312,14 +333,16 @@ function clause execute VXMTYPE(funct6, vs2, rs1, vd) = {
     Err(()) => return Illegal_Instruction()
   };
   var result = initial_result;
+  let max_elem = unsigned(ones('m));
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      let res : bool = match funct6 {
-        VXM_VMADC    => unsigned(vs2_val[i]) + unsigned(rs1_val) + (if vm_val[i] == 0b1 then 1 else 0) > 2 ^ SEW - 1,
-        VXM_VMSBC    => unsigned(vs2_val[i]) - unsigned(rs1_val) - (if vm_val[i] == 0b1 then 1 else 0) < 0
-      };
-      result[i] = bool_to_bit(res)
+  match funct6 {
+    VXM_VMADC => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) + unsigned(rs1_val) + unsigned(vm_val[i]) > max_elem;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VXM_VMSBC => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) - unsigned(rs1_val) - unsigned(vm_val[i]) < 0;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
     }
   };
 
@@ -372,14 +395,16 @@ function clause execute VXMCTYPE(funct6, vs2, rs1, vd) = {
     Err(()) => return Illegal_Instruction()
   };
   var result = initial_result;
+  let max_elem = unsigned(ones('m));
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      let res : bool = match funct6 {
-        VXMC_VMADC    => unsigned(vs2_val[i]) + unsigned(rs1_val) > 2 ^ SEW - 1,
-        VXMC_VMSBC    => unsigned(vs2_val[i]) - unsigned(rs1_val) < 0
-      };
-      result[i] = bool_to_bit(res)
+  match funct6 {
+    VXMC_VMADC => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) + unsigned(rs1_val) > max_elem;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VXMC_VMSBC => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) - unsigned(rs1_val) < 0;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
     }
   };
 
@@ -439,12 +464,16 @@ function clause execute VXMSTYPE(funct6, vs2, rs1, vd) = {
   };
   var result = initial_result;
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
-        VXMS_VADC     => to_bits_unsafe(SEW, unsigned(vs2_val[i]) + unsigned(rs1_val) + (if vm_val[i] == 0b1 then 1 else 0)),
-        VXMS_VSBC     => to_bits_unsafe(SEW, unsigned(vs2_val[i]) - unsigned(rs1_val) - (if vm_val[i] == 0b1 then 1 else 0))
-      }
+  match funct6 {
+    VXMS_VADC => foreach (i from 0 to (num_elem - 1)) {
+      let carry : bits('m) = zero_extend('m, vm_val[i]);
+      let elem : bits('m) = vs2_val[i] + rs1_val + carry;
+      result[i] = mux2(mask[i], result[i], elem)
+    },
+    VXMS_VSBC => foreach (i from 0 to (num_elem - 1)) {
+      let carry : bits('m) = zero_extend('m, vm_val[i]);
+      let elem : bits('m) = vs2_val[i] - rs1_val - carry;
+      result[i] = mux2(mask[i], result[i], elem)
     }
   };
 
@@ -503,19 +532,38 @@ function clause execute VXCMPTYPE(funct6, vm, vs2, rs1, vd) = {
   };
   var result = initial_result;
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      let res : bool = match funct6 {
-        VXCMP_VMSEQ    => vs2_val[i] == rs1_val,
-        VXCMP_VMSNE    => vs2_val[i] != rs1_val,
-        VXCMP_VMSLTU   => unsigned(vs2_val[i]) < unsigned(rs1_val),
-        VXCMP_VMSLT    => signed(vs2_val[i]) < signed(rs1_val),
-        VXCMP_VMSLEU   => unsigned(vs2_val[i]) <= unsigned(rs1_val),
-        VXCMP_VMSLE    => signed(vs2_val[i]) <= signed(rs1_val),
-        VXCMP_VMSGTU   => unsigned(vs2_val[i]) > unsigned(rs1_val),
-        VXCMP_VMSGT    => signed(vs2_val[i]) > signed(rs1_val)
-      };
-      result[i] = bool_to_bit(res)
+  match funct6 {
+    VXCMP_VMSEQ  => foreach (i from 0 to (num_elem - 1)) {
+      let res = vs2_val[i] == rs1_val;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VXCMP_VMSNE  => foreach (i from 0 to (num_elem - 1)) {
+      let res = vs2_val[i] != rs1_val;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VXCMP_VMSLTU => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) < unsigned(rs1_val);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VXCMP_VMSLT  => foreach (i from 0 to (num_elem - 1)) {
+      let res = signed(vs2_val[i]) < signed(rs1_val);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VXCMP_VMSLEU => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) <= unsigned(rs1_val);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VXCMP_VMSLE  => foreach (i from 0 to (num_elem - 1)) {
+      let res = signed(vs2_val[i]) <= signed(rs1_val);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VXCMP_VMSGTU => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) > unsigned(rs1_val);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VXCMP_VMSGT  => foreach (i from 0 to (num_elem - 1)) {
+      let res = signed(vs2_val[i]) > signed(rs1_val);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
     }
   };
 
@@ -576,14 +624,11 @@ function clause execute VIMTYPE(funct6, vs2, simm, vd) = {
     Err(()) => return Illegal_Instruction()
   };
   var result = initial_result;
+  let max_elem = unsigned(ones('m));
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      let res : bool = match funct6 {
-        VIM_VMADC    => unsigned(vs2_val[i]) + unsigned(imm_val) + (if vm_val[i] == 0b1 then 1 else 0) > 2 ^ SEW - 1
-      };
-      result[i] = bool_to_bit(res)
-    }
+    let res = unsigned(vs2_val[i]) + unsigned(imm_val) + unsigned(vm_val[i]) > max_elem;
+    result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
   };
 
   write_vmask(num_elem, vd, result);
@@ -635,14 +680,11 @@ function clause execute VIMCTYPE(funct6, vs2, simm, vd) = {
     Err(()) => return Illegal_Instruction()
   };
   var result = initial_result;
+  let max_elem = unsigned(ones('m));
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      let res : bool = match funct6 {
-        VIMC_VMADC    => unsigned(vs2_val[i]) + unsigned(imm_val) > 2 ^ SEW - 1
-      };
-      result[i] = bool_to_bit(res)
-    }
+    let res = unsigned(vs2_val[i]) + unsigned(imm_val) > max_elem;
+    result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
   };
 
   write_vmask(num_elem, vd, result);
@@ -702,11 +744,9 @@ function clause execute VIMSTYPE(funct6, vs2, simm, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
-        VIMS_VADC     => to_bits_unsafe(SEW, unsigned(vs2_val[i]) + unsigned(imm_val) + (if vm_val[i] == 0b1 then 1 else 0))
-      }
-    }
+    let carry : bits('m) = zero_extend('m, vm_val[i]);
+    let elem : bits('m) = vs2_val[i] + imm_val + carry;
+    result[i] = mux2(mask[i], result[i], elem)
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -763,17 +803,30 @@ function clause execute VICMPTYPE(funct6, vm, vs2, simm, vd) = {
   };
   var result = initial_result;
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      let res : bool = match funct6 {
-        VICMP_VMSEQ  => vs2_val[i] == imm_val,
-        VICMP_VMSNE  => vs2_val[i] != imm_val,
-        VICMP_VMSLEU => unsigned(vs2_val[i]) <= unsigned(imm_val),
-        VICMP_VMSLE  => signed(vs2_val[i]) <= signed(imm_val),
-        VICMP_VMSGTU => unsigned(vs2_val[i]) > unsigned(imm_val),
-        VICMP_VMSGT  => signed(vs2_val[i]) > signed(imm_val)
-      };
-      result[i] = bool_to_bit(res)
+  match funct6 {
+    VICMP_VMSEQ  => foreach (i from 0 to (num_elem - 1)) {
+      let res = vs2_val[i] == imm_val;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VICMP_VMSNE  => foreach (i from 0 to (num_elem - 1)) {
+      let res = vs2_val[i] != imm_val;
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VICMP_VMSLEU => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) <= unsigned(imm_val);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VICMP_VMSLE  => foreach (i from 0 to (num_elem - 1)) {
+      let res = signed(vs2_val[i]) <= signed(imm_val);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VICMP_VMSGTU => foreach (i from 0 to (num_elem - 1)) {
+      let res = unsigned(vs2_val[i]) > unsigned(imm_val);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
+    },
+    VICMP_VMSGT  => foreach (i from 0 to (num_elem - 1)) {
+      let res = signed(vs2_val[i]) > signed(imm_val);
+      result[i] = mux2(mask[i], result[i], isla_bool_to_bit_or_default(res))
     }
   };
 

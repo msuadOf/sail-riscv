@@ -407,11 +407,20 @@ function clause read_CSR(0xC22) = VLENB
 // Note: The spec recommends trapping if vstart is out of bounds but the
 // current implementation does not yet do that.
 
+$ifndef SYMBOLIC
 function set_vstart(value : bits(16)) -> unit = {
   dirty_v_context();
   vstart = zero_extend(value[(vlen_exp - 1) .. 0]);
   csr_write_callback("vstart", vstart);
 }
+$else
+function set_vstart(value : bits(16)) -> unit = {
+  dirty_v_context();
+  vstart = zero_extend(value[(vlen_exp - 1) .. 0]);
+  if __isla_use_extra_ops then csr_full_write_callback("vstart", 0x008, vstart)
+  else csr_write_callback("vstart", vstart);
+}
+$endif
 
 private function write_vcsr(vxrm_val : bits(2), vxsat_val : bits(1)) -> unit = {
   vcsr[vxrm]  = vxrm_val; // Note: frm can be an illegal value, 101, 110, 111
