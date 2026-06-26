@@ -222,6 +222,7 @@ function illegal_indexed_store(nf : nfields, EEW_index : int, EMUL_pow_index : i
 // Scalar register shaping
 val get_scalar : forall 'm, 'm >= 8. (regidx, int('m)) -> bits('m)
 function get_scalar(rs1, SEW) = {
+  assert_sew(SEW);
   if SEW <= xlen then {
     // Least significant SEW bits
     X(rs1)[SEW - 1 .. 0]
@@ -238,10 +239,10 @@ function get_velem_quad(v, i) = v[4 * i + 3] @ v[4 * i + 2] @ v[4 * i + 1] @ v[4
 // Divide the input bitvector into 4 equal slices and store them in vd starting at position 4*i
 val write_velem_quad : forall 'n, 'n > 0 . (vregidx, sew_bitsize, bits('n), nat) -> unit
 function write_velem_quad(vd, SEW, input, i) = {
+  assert_sew(SEW);
   foreach(j from 0 to 3) {
-    // TODO: Change the type signature to enforce this assertion.
     assert((j + 1) * SEW <= 'n);
-    write_single_element(SEW, 4 * i + j, vd, input[(j + 1) * SEW - 1 .. j * SEW]);
+    write_single_element(SEW, 4 * i + j, vd, input[(j + 1) * SEW - 1 .. j * SEW])
   }
 }
 
@@ -293,8 +294,11 @@ function get_end_element() -> int = unsigned(vl) - 1
 //   vector1 is the result vector with values applied to masked elements
 //   vector2 is a "mask" vector that is true for an element if the corresponding element
 //     in the result vector should be updated by the calling instruction
+$ifndef SYMBOLIC
 val init_masked_result : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), int('p), vector('n, bits('m)), bits('n)) -> result((vector('n, bits('m)), bits('n)), unit)
 function init_masked_result(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
+  assert_vector_num_elem(num_elem);
+  assert_lmul_pow(LMUL_pow);
   let start_element : nat = match get_start_element() {
     Ok(v)   => v,
     Err(()) => return Err(())
@@ -343,6 +347,84 @@ function init_masked_result(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
 
   Ok((result, mask))
 }
+$else
+val isla_init_mask = pure "isla_init_mask" : forall 'n 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n)) -> bits('n)
+val isla_vector_select = pure "isla_vector_select" : forall 'n 'm, 'n >= 0 . (bits('n), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
+val isla_masktypei_result = pure "isla_masktypei_result" : forall 'n 'm 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n), bits('m), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
+val isla_masktypev_result = pure "isla_masktypev_result" : forall 'n 'm 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n), vector('n, bits('m)), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
+val isla_vector_rev8 = pure "isla_vector_rev8" : forall 'n 'm, 'n >= 0 & 'm >= 0. vector('n, bits('m * 8)) -> vector('n, bits('m * 8))
+
+val init_masked_result_default : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), int('p), vector('n, bits('m)), bits('n)) -> result((vector('n, bits('m)), bits('n)), unit)
+function init_masked_result_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
+  assert_vector_num_elem(num_elem);
+  assert_lmul_pow(LMUL_pow);
+  let start_element : nat = match get_start_element() {
+    Ok(v)   => v,
+    Err(()) => return Err(())
+  };
+  let end_element   = get_end_element();
+
+  // Determine the actual number of elements when lmul < 1
+  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  assert(num_elem >= real_num_elem);
+
+  let tail_ag : agtype = get_vtype_vta();
+  let mask_ag : agtype = get_vtype_vma();
+  var mask : bits('n) = undefined;
+  var result : vector('n, bits('m)) = undefined;
+
+  foreach (i from 0 to (num_elem - 1)) {
+    if i < start_element then {
+      // Prestart elements defined by vstart
+      result[i] = vd_val[i];
+      mask[i] = 0b0
+    } else if i > end_element then {
+      // Tail elements defined by vl
+      result[i] = match tail_ag {
+        UNDISTURBED => vd_val[i],
+        AGNOSTIC    => vd_val[i] // TODO: configuration support
+      };
+      mask[i] = 0b0
+    } else if i >= real_num_elem then {
+      // Tail elements defined by lmul < 1
+      result[i] = match tail_ag {
+        UNDISTURBED => vd_val[i],
+        AGNOSTIC    => vd_val[i] // TODO: configuration support
+      };
+      mask[i] = 0b0
+    } else if vm_val[i] == 0b0 then {
+      // Inactive body elements defined by vm
+      result[i] = match mask_ag {
+        UNDISTURBED => vd_val[i],
+        AGNOSTIC    => vd_val[i] // TODO: configuration support
+      };
+      mask[i] = 0b0
+    } else {
+      // Active body elements
+      mask[i] = 0b1;
+    }
+  };
+
+  Ok((result, mask))
+}
+
+val init_masked_result : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), int('p), vector('n, bits('m)), bits('n)) -> result((vector('n, bits('m)), bits('n)), unit)
+function init_masked_result(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
+  assert_lmul_pow(LMUL_pow);
+  if __isla_use_extra_ops then {
+    let start_element : nat = match get_start_element() {
+      Ok(v)   => v,
+      Err(()) => return Err(())
+    };
+    let end_element   = get_end_element();
+    let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+    assert(num_elem >= real_num_elem);
+    Ok((vd_val, isla_init_mask(num_elem, start_element, end_element, real_num_elem, vm_val)))
+  } else {
+    init_masked_result_default(num_elem, EEW, LMUL_pow, vd_val, vm_val)
+  }
+}
+$endif
 
 // For instructions like vector reduction and vector store,
 // masks on prestart, inactive and tail elements only affect the validation of source register elements
@@ -350,6 +432,8 @@ function init_masked_result(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
 // In these cases, this function can be called to simply get the mask vector for vs (without the prepared vd result vector).
 val init_masked_source : forall 'n 'p, 'n > 0. (int('n), int('p), bits('n)) -> result(bits('n), unit)
 function init_masked_source(num_elem, LMUL_pow, vm_val) = {
+  assert_vector_num_elem(num_elem);
+  assert_lmul_pow(LMUL_pow);
   let start_element : nat = match get_start_element() {
     Ok(v)   => v,
     Err(()) => return Err(())
@@ -385,8 +469,11 @@ function init_masked_source(num_elem, LMUL_pow, vm_val) = {
 
 // Mask handling for carry functions that use masks as input/output
 // Only prestart and tail elements are masked in a mask value
+$ifndef SYMBOLIC
 val init_masked_result_carry : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n)) -> result((bits('n), bits('n)), unit)
 function init_masked_result_carry(num_elem, _EEW, LMUL_pow, vd_val) = {
+  assert_vector_num_elem(num_elem);
+  assert_lmul_pow(LMUL_pow);
   let start_element : nat = match get_start_element() {
     Ok(v)   => v,
     Err(()) => return Err(())
@@ -422,10 +509,72 @@ function init_masked_result_carry(num_elem, _EEW, LMUL_pow, vd_val) = {
 
   Ok(result, mask)
 }
+$else
+val init_masked_result_carry_default : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n)) -> result((bits('n), bits('n)), unit)
+function init_masked_result_carry_default(num_elem, _EEW, LMUL_pow, vd_val) = {
+  assert_vector_num_elem(num_elem);
+  assert_lmul_pow(LMUL_pow);
+  let start_element : nat = match get_start_element() {
+    Ok(v)   => v,
+    Err(()) => return Err(())
+  };
+  let end_element   = get_end_element();
+
+  // Determine the actual number of elements when lmul < 1
+  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  assert(num_elem >= real_num_elem);
+
+  var mask : bits('n) = undefined;
+  var result : bits('n) = undefined;
+
+  foreach (i from 0 to (num_elem - 1)) {
+    if i < start_element then {
+      // Prestart elements defined by vstart
+      result[i] = vd_val[i];
+      mask[i] = 0b0
+    } else if i > end_element then {
+      // Tail elements defined by vl
+      // Mask tail is always agnostic
+      result[i] = vd_val[i]; // TODO: configuration support
+      mask[i] = 0b0
+    } else if i >= real_num_elem then {
+      // Tail elements defined by lmul < 1
+      // Mask tail is always agnostic
+      result[i] = vd_val[i]; // TODO: configuration support
+      mask[i] = 0b0
+    } else {
+      // Active body elements
+      mask[i] = 0b1
+    }
+  };
+
+  Ok(result, mask)
+}
+
+val init_masked_result_carry : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n)) -> result((bits('n), bits('n)), unit)
+function init_masked_result_carry(num_elem, EEW, LMUL_pow, vd_val) = {
+  assert_lmul_pow(LMUL_pow);
+  if __isla_use_extra_ops then {
+    let start_element : nat = match get_start_element() {
+      Ok(v)   => v,
+      Err(()) => return Err(())
+    };
+    let end_element   = get_end_element();
+    let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+    assert(num_elem >= real_num_elem);
+    Ok((vd_val, isla_init_mask(num_elem, start_element, end_element, real_num_elem, ones())))
+  } else {
+    init_masked_result_carry_default(num_elem, EEW, LMUL_pow, vd_val)
+  }
+}
+$endif
 
 // Mask handling for cmp functions that use masks as output
+$ifndef SYMBOLIC
 val init_masked_result_cmp : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n), bits('n)) -> result((bits('n), bits('n)), unit)
 function init_masked_result_cmp(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
+  assert_vector_num_elem(num_elem);
+  assert_lmul_pow(LMUL_pow);
   let start_element : nat = match get_start_element() {
     Ok(v)   => v,
     Err(()) => return Err(())
@@ -469,12 +618,81 @@ function init_masked_result_cmp(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
 
   Ok(result, mask)
 }
+$else
+val init_masked_result_cmp_default : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n), bits('n)) -> result((bits('n), bits('n)), unit)
+function init_masked_result_cmp_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
+  assert_vector_num_elem(num_elem);
+  assert_lmul_pow(LMUL_pow);
+  let start_element : nat = match get_start_element() {
+    Ok(v)   => v,
+    Err(()) => return Err(())
+  };
+  let end_element   = get_end_element();
+
+  // Determine the actual number of elements when lmul < 1
+  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  assert(num_elem >= real_num_elem);
+
+  let mask_ag : agtype = get_vtype_vma();
+  var mask : bits('n) = undefined;
+  var result : bits('n) = undefined;
+
+  foreach (i from 0 to (num_elem - 1)) {
+    if i < start_element then {
+      // Prestart elements defined by vstart
+      result[i] = vd_val[i];
+      mask[i] = 0b0
+    } else if i > end_element then {
+      // Tail elements defined by vl
+      // Mask tail is always agnostic
+      result[i] = vd_val[i]; // TODO: configuration support
+      mask[i] = 0b0
+    } else if i >= real_num_elem then {
+      // Tail elements defined by lmul < 1
+      // Mask tail is always agnostic
+      result[i] = vd_val[i]; // TODO: configuration support
+      mask[i] = 0b0
+    } else if vm_val[i] == 0b0 then {
+      // Inactive body elements defined by vm
+      result[i] = match mask_ag {
+        UNDISTURBED => vd_val[i],
+        AGNOSTIC    => vd_val[i] // TODO: configuration support
+      };
+      mask[i] = 0b0
+    } else {
+      // Active body elements
+      mask[i] = 0b1
+    }
+  };
+
+  Ok(result, mask)
+}
+
+val init_masked_result_cmp : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n), bits('n)) -> result((bits('n), bits('n)), unit)
+function init_masked_result_cmp(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
+  assert_lmul_pow(LMUL_pow);
+  if __isla_use_extra_ops then {
+    let start_element : nat = match get_start_element() {
+      Ok(v)   => v,
+      Err(()) => return Err(())
+    };
+    let end_element   = get_end_element();
+    let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+    assert(num_elem >= real_num_elem);
+    Ok((vd_val, isla_init_mask(num_elem, start_element, end_element, real_num_elem, vm_val)))
+  } else {
+    init_masked_result_cmp_default(num_elem, EEW, LMUL_pow, vd_val, vm_val)
+  }
+}
+$endif
 
 // For vector load/store segment instructions:
 // Read multiple register groups and concatenate them in parallel
 // The whole segments with the same element index are combined together
 val read_vreg_seg : forall 'n 'm 'p 'q, 'n >= 0 & is_sew_bitsize('m) & nfields_range('q). (int('n), int('m), int('p), int('q), vregidx) -> vector('n, bits('q * 'm))
 function read_vreg_seg(num_elem, SEW, LMUL_pow, nf, vrid) = {
+  assert_vector_num_elem(num_elem);
+  assert_nfields(nf);
   let LMUL_reg : int = if LMUL_pow <= 0 then 1 else 2 ^ LMUL_pow;
   var vreg_list : vector('q, vector('n, bits('m))) = vector_init(vector_init(zeros()));
   var result : vector('n, bits('q * 'm)) = vector_init(zeros());
@@ -493,6 +711,7 @@ function read_vreg_seg(num_elem, SEW, LMUL_pow, nf, vrid) = {
 // Shift amounts
 val get_shift_amount : forall 'n, 0 <= 'n . (bits('n), sew_bitsize) -> nat
 function get_shift_amount(bit_val, SEW) = {
+  assert_sew(SEW);
   let lowlog2bits : range(3, 6) = match SEW {
     8  => 3,
     16 => 4,
@@ -551,6 +770,7 @@ function signed_saturation(len, elem) = {
 }
 
 // The parameter m is implicit to help proof the proof assistant backends infer its value.
+$ifndef SYMBOLIC
 val vrev8 : forall 'n 'm, 'n >= 0 & 'm >= 0. (implicit('m), vector('n, bits('m * 8))) -> vector('n, bits('m * 8))
 function vrev8(_m, input) = {
   var output : vector('n, bits('m * 8)) = input;
@@ -559,3 +779,18 @@ function vrev8(_m, input) = {
   };
   output
 }
+$else
+val vrev8_default : forall 'n 'm, 'n >= 0 & 'm >= 0. (implicit('m), vector('n, bits('m * 8))) -> vector('n, bits('m * 8))
+function vrev8_default(_m, input) = {
+  var output : vector('n, bits('m * 8)) = input;
+  foreach (i from 0 to ('n - 1)) {
+    output[i] = rev8(input[i]);
+  };
+  output
+}
+
+val vrev8 : forall 'n 'm, 'n >= 0 & 'm >= 0. (implicit('m), vector('n, bits('m * 8))) -> vector('n, bits('m * 8))
+function vrev8(_m, input) =
+  if __isla_use_extra_ops then isla_vector_rev8(input)
+  else vrev8_default(_m, input)
+$endif

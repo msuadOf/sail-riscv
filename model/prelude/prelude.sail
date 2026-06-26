@@ -221,6 +221,27 @@ overload operator * = {mult_atom, mult_int}
 overload operator / = {quot_positive_round_zero}
 overload operator % = {rem_positive_round_zero}
 
+// `mask` identifies the field location in `reg`;
+// `value` is the unshifted field value.
+val get_field : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits('n)
+function get_field(reg, mask) = {
+  let shift = count_trailing_zeros(mask);
+  (reg & mask) >> shift
+}
+
+val set_field : forall 'n, 'n > 0. (bits('n), bits('n), bits('n)) -> bits('n)
+function set_field(reg, mask, value) = {
+  let shift = count_trailing_zeros(mask);
+  (reg & ~(mask)) | ((value << shift) & mask)
+}
+
+// 2:1 mux over a whole bitvector. sel=0 selects input0; sel=1 selects input1.
+val mux2 : forall 'n, 'n > 0. (bits(1), bits('n), bits('n)) -> bits('n)
+function mux2(sel, input0, input1) = {
+  let select_mask : bits('n) = replicate_bits(sel, 'n);
+  (input0 & ~(select_mask)) | (input1 & select_mask)
+}
+
 // This is a slightly arbitrary limit on the maximum number of bytes
 // in a memory access.  It helps to generate slightly better C code
 // because it means width argument can be fast native integer. It

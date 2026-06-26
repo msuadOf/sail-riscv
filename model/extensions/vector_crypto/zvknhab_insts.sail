@@ -30,6 +30,7 @@ function clause execute VSHA2MS_VV(vs2, vs1, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32 | SEW == 64);
+  assert_sew_32_or_64(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vs1_val = read_vreg(num_elem, SEW, LMUL_pow, vs1);
@@ -92,6 +93,7 @@ mapping vsha2_mnemonic : zvk_vsha2_funct6 <-> string = {
 mapping clause assembly = ZVKSHA2TYPE(funct6, vs2, vs1, vd)
   <-> vsha2_mnemonic(funct6) ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ vreg_name(vs1)
 
+$ifndef SYMBOLIC
 function clause execute ZVKSHA2TYPE(funct6, vs2, vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -103,6 +105,7 @@ function clause execute ZVKSHA2TYPE(funct6, vs2, vs1, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32 | SEW == 64);
+  assert_sew_32_or_64(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vs1_val = read_vreg(num_elem, SEW, LMUL_pow, vs1);
@@ -163,3 +166,73 @@ function clause execute ZVKSHA2TYPE(funct6, vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$else
+function clause execute ZVKSHA2TYPE(funct6, vs2, vs1, vd) = {
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if not(valid_reg_group(vs1, LMUL_pow)) |
+     not(valid_reg_group(vs2, LMUL_pow)) |
+     not(valid_reg_group(vd, LMUL_pow)) |
+     not(SEW == 32 | SEW == 64)
+  then return Illegal_Instruction();
+
+  let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vs1_val = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
+
+  let eg_len   = (unsigned(vl) / 4);
+  let eg_start = (unsigned(vstart) / 4);
+
+  foreach (i from eg_start to (eg_len - 1)) {
+    assert(i * 4 + 3 < num_elem);
+
+    var f = vs2_val[i*4+0];
+    var e = vs2_val[i*4+1];
+    var b = vs2_val[i*4+2];
+    var a = vs2_val[i*4+3];
+
+    var h = vd_val[i*4+0];
+    var g = vd_val[i*4+1];
+    var d = vd_val[i*4+2];
+    var c = vd_val[i*4+3];
+
+    let w0 = if funct6 == ZVK_VSHA2CL_VV
+             then vs1_val[i*4+0]
+             else vs1_val[i*4+2];
+
+    let w1 = if funct6 == ZVK_VSHA2CL_VV
+             then vs1_val[i*4+1]
+             else vs1_val[i*4+3];
+
+    var T1 = h + zvk_sum1(e, SEW) + zvk_ch(e,f,g) + w0;
+    var T2 = zvk_sum0(a, SEW) + zvk_maj(a, b, c);
+
+    h  = g;
+    g  = f;
+    f  = e;
+    e  = d + T1;
+    d  = c;
+    c  = b;
+    b  = a;
+    a  = T1 + T2;
+
+    T1 = h + zvk_sum1(e, SEW) + zvk_ch(e, f, g) + w1;
+    T2 = zvk_sum0(a, SEW) + zvk_maj(a, b, c);
+    h  = g;
+    g  = f;
+    f  = e;
+    e  = d + T1;
+    d  = c;
+    c  = b;
+    b  = a;
+    a  = T1 + T2;
+
+    write_velem_quad(vd, SEW, a @ b @ e @ f, i);
+  };
+
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$endif

@@ -25,6 +25,7 @@ function clause execute VSM4K_VI(vs2, uimm, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
+  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
 
@@ -88,6 +89,7 @@ function clause execute ZVKSM4RTYPE(funct6, vs2, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
+  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);

@@ -14,3 +14,6 @@ z3_problems
 /cmake-build-*
 # z3 cache
 sail_smt_cache
+
+/build-symbolic-*/
+/.*/
