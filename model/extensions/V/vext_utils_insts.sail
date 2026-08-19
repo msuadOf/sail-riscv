@@ -353,7 +353,6 @@ val isla_vector_select = pure "isla_vector_select" : forall 'n 'm, 'n >= 0 . (bi
 val isla_masktypei_result = pure "isla_masktypei_result" : forall 'n 'm 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n), bits('m), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
 val isla_masktypev_result = pure "isla_masktypev_result" : forall 'n 'm 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n), vector('n, bits('m)), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
 val isla_vector_rev8 = pure "isla_vector_rev8" : forall 'n 'm, 'n >= 0 & 'm >= 0. vector('n, bits('m * 8)) -> vector('n, bits('m * 8))
-val isla_bool_to_bit = pure "isla_bool_to_bit" : bool -> bits(1)
 
 val init_masked_result_default : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), int('p), vector('n, bits('m)), bits('n)) -> result((vector('n, bits('m)), bits('n)), unit)
 function init_masked_result_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
@@ -731,16 +730,20 @@ function get_fixed_rounding_incr(vec_elem, shift_amount) = {
     let rounding_mode = vcsr[vxrm];
     // TODO: Change the type signature to enforce this assertion.
     assert(shift_amount < 'm);
+    // Keep every intermediate at the original fixed width.  Dynamic slices such as
+    // vec_elem[shift_amount - 2 .. 0] become SymbolicLength values in Isla, while
+    // fixed-width shifts followed by a static bit access preserve the same semantics.
+    let shifted : bits('m) = vec_elem >> shift_amount;
+    let rounding_bit : bits(1) = vec_elem[shift_amount - 1];
+    let sticky_below_rounding =
+      if shift_amount == 1 then false
+      else (vec_elem << ('m - shift_amount + 1)) != zeros();
+    let discarded_nonzero = (vec_elem << ('m - shift_amount)) != zeros();
     match rounding_mode {
-      0b00 => vec_elem[shift_amount - 1],
-      0b01 => {
-        bool_to_bit(
-          vec_elem[shift_amount - 1] == 0b1 &
-          ((if shift_amount == 1 then false else vec_elem[shift_amount - 2 .. 0] != zeros()) | vec_elem[shift_amount] == 0b1))
-      },
+      0b00 => rounding_bit,
+      0b01 => bool_to_bit(rounding_bit == 0b1 & (sticky_below_rounding | shifted[0] == 0b1)),
       0b10 => 0b0,
-      0b11 => bool_to_bit(
-        vec_elem[shift_amount] != 0b1 & vec_elem[shift_amount - 1 .. 0] != zeros())
+      0b11 => bool_to_bit(shifted[0] != 0b1 & discarded_nonzero)
     }
   }
 }
@@ -775,7 +778,8 @@ val unsigned_saturation_result : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), 
 function unsigned_saturation_result(len, elem) = {
   let truncated : bits('m) = elem['m - 1 .. 0];
   let extended : bits('n) = zero_extend(truncated);
-  let saturated = isla_bool_to_bit(elem != extended);
+  let difference : bits('n) = elem ^ extended;
+  let saturated : bits(1) = (difference | (zeros('n) - difference))['n - 1];
   (masked_select(saturated, ones('m), truncated), saturated)
 }
 
@@ -790,7 +794,8 @@ val signed_saturation_result : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bi
 function signed_saturation_result(len, elem) = {
   let truncated : bits('m) = elem['m - 1 .. 0];
   let extended : bits('n) = sign_extend(truncated);
-  let saturated = isla_bool_to_bit(elem != extended);
+  let difference : bits('n) = elem ^ extended;
+  let saturated : bits(1) = (difference | (zeros('n) - difference))['n - 1];
   let saturation_value = masked_select(elem['n - 1], 0b1 @ zeros('m - 1), 0b0 @ ones('m - 1));
   (masked_select(saturated, saturation_value, truncated), saturated)
 }
