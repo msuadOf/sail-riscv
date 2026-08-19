@@ -286,6 +286,24 @@ function assert_vector_num_elem_value(num_elem) = {
 // because the minimum SEW is 8 and the maximum LMUL is 8. This is also
 // true because all elements must be able to fit into a single register
 // at 1-bit per element for masks.
+// Bit-mask conditional assignment: replaces `if mask[i]==1 then result[i] = new_val`
+// with branch-free bit manipulation to avoid symbolic control-flow fork.
+// mask_bit=1 → new_val, mask_bit=0 → old_val.
+val masked_select : forall 'w. (bits(1), bits('w), bits('w)) -> bits('w)
+function masked_select(mask_bit, new_val, old_val) = {
+  let mask_ext : bits('w) = to_bits_unsafe('w, 0 - unsigned(mask_bit));
+  let mask_inv : bits('w) = to_bits_unsafe('w, unsigned(mask_bit) - 1);
+  (new_val & mask_ext) | (old_val & mask_inv)
+}
+
+// Bit-mask conditional accumulate: replaces `if mask[i]==1 then sum = sum + elem`
+// with branch-free: sum = sum + (elem & mask_ext).
+val masked_add : forall 'w. (bits(1), bits('w), bits('w)) -> bits('w)
+function masked_add(mask_bit, sum, elem) = {
+  let mask_ext : bits('w) = to_bits_unsafe('w, 0 - unsigned(mask_bit));
+  sum + (elem & mask_ext)
+}
+
 function get_num_elem(LMUL_pow : LMUL_pow, SEW : sew_bitsize) -> range(1, vlen) = {
   assert_lmul_pow(LMUL_pow);
   assert_sew(SEW);

@@ -55,13 +55,11 @@ function clause execute RIVVTYPE(funct6, vm, vs2, vs1, vd) = {
 
   var sum : bits('o) = read_single_element(SEW_widen, 0, vs1); // vs1 regardless of LMUL setting
   foreach (i from 0 to (num_elem_vs - 1)) {
-    if mask[i] == 0b1 then {
-      let elem : bits('o) = match funct6 {
+    let elem : bits('o) = match funct6 {
         IVV_VWREDSUMU  => to_bits_unsafe(SEW_widen, unsigned(vs2_val[i])),
         IVV_VWREDSUM   => to_bits_unsafe(SEW_widen, signed(vs2_val[i]))
       };
-      sum = sum + elem
-    }
+      sum = masked_add(mask[i], sum, elem)
   };
 
   write_single_element(SEW_widen, 0, vd, sum);
@@ -124,8 +122,7 @@ function clause execute RMVVTYPE(funct6, vm, vs2, vs1, vd) = {
 
   var sum : bits('m) = read_single_element(SEW, 0, vs1); // vs1 regardless of LMUL setting
   foreach (i from 0 to (num_elem_vs - 1)) {
-    if mask[i] == 0b1 then {
-      sum = match funct6 {
+    let new_sum : bits('m) = match funct6 {
         MVV_VREDSUM   => sum + vs2_val[i],
         MVV_VREDAND   => sum & vs2_val[i],
         MVV_VREDOR    => sum | vs2_val[i],
@@ -134,8 +131,8 @@ function clause execute RMVVTYPE(funct6, vm, vs2, vs1, vd) = {
         MVV_VREDMINU  => to_bits_unsafe(SEW, min(unsigned(vs2_val[i]), unsigned(sum))),
         MVV_VREDMAX   => to_bits_unsafe(SEW, max(signed(vs2_val[i]), signed(sum))),
         MVV_VREDMAXU  => to_bits_unsafe(SEW, max(unsigned(vs2_val[i]), unsigned(sum)))
-      }
-    }
+      };
+    sum = masked_select(mask[i], new_sum, sum)
   };
 
   write_single_element(SEW, 0, vd, sum);
@@ -158,3 +155,4 @@ mapping rmvvtype_mnemonic : rmvvfunct6 <-> string = {
 
 mapping clause assembly = RMVVTYPE(funct6, vm, vs2, vs1, vd)
   <-> rmvvtype_mnemonic(funct6) ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ vreg_name(vs1) ^ maybe_vmask(vm)
+

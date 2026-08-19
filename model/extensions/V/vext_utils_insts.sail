@@ -353,6 +353,7 @@ val isla_vector_select = pure "isla_vector_select" : forall 'n 'm, 'n >= 0 . (bi
 val isla_masktypei_result = pure "isla_masktypei_result" : forall 'n 'm 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n), bits('m), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
 val isla_masktypev_result = pure "isla_masktypev_result" : forall 'n 'm 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n), vector('n, bits('m)), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
 val isla_vector_rev8 = pure "isla_vector_rev8" : forall 'n 'm, 'n >= 0 & 'm >= 0. vector('n, bits('m * 8)) -> vector('n, bits('m * 8))
+val isla_bool_to_bit = pure "isla_bool_to_bit" : bool -> bits(1)
 
 val init_masked_result_default : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), int('p), vector('n, bits('m)), bits('n)) -> result((vector('n, bits('m)), bits('n)), unit)
 function init_masked_result_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
@@ -745,6 +746,7 @@ function get_fixed_rounding_incr(vec_elem, shift_amount) = {
 }
 
 // Fixed point unsigned saturation
+$ifndef SYMBOLIC
 val unsigned_saturation : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> bits('m)
 function unsigned_saturation(len, elem) = {
   if unsigned(elem) > unsigned(ones('m)) then {
@@ -768,6 +770,38 @@ function signed_saturation(len, elem) = {
     elem['m - 1 .. 0]
   };
 }
+$else
+val unsigned_saturation_result : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> (bits('m), bits(1))
+function unsigned_saturation_result(len, elem) = {
+  let truncated : bits('m) = elem['m - 1 .. 0];
+  let extended : bits('n) = zero_extend(truncated);
+  let saturated = isla_bool_to_bit(elem != extended);
+  (masked_select(saturated, ones('m), truncated), saturated)
+}
+
+val unsigned_saturation : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> bits('m)
+function unsigned_saturation(len, elem) = {
+  let (result, saturated) = unsigned_saturation_result(len, elem);
+  vcsr[vxsat] = vcsr[vxsat] | saturated;
+  result
+}
+
+val signed_saturation_result : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> (bits('m), bits(1))
+function signed_saturation_result(len, elem) = {
+  let truncated : bits('m) = elem['m - 1 .. 0];
+  let extended : bits('n) = sign_extend(truncated);
+  let saturated = isla_bool_to_bit(elem != extended);
+  let saturation_value = masked_select(elem['n - 1], 0b1 @ zeros('m - 1), 0b0 @ ones('m - 1));
+  (masked_select(saturated, saturation_value, truncated), saturated)
+}
+
+val signed_saturation : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> bits('m)
+function signed_saturation(len, elem) = {
+  let (result, saturated) = signed_saturation_result(len, elem);
+  vcsr[vxsat] = vcsr[vxsat] | saturated;
+  result
+}
+$endif
 
 // The parameter m is implicit to help proof the proof assistant backends infer its value.
 $ifndef SYMBOLIC
