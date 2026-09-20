@@ -730,16 +730,20 @@ function get_fixed_rounding_incr(vec_elem, shift_amount) = {
     let rounding_mode = vcsr[vxrm];
     // TODO: Change the type signature to enforce this assertion.
     assert(shift_amount < 'm);
+    // Keep every intermediate at the original fixed width.  Dynamic slices such as
+    // vec_elem[shift_amount - 2 .. 0] become SymbolicLength values in Isla, while
+    // fixed-width shifts followed by a static bit access preserve the same semantics.
+    let shifted : bits('m) = vec_elem >> shift_amount;
+    let rounding_bit : bits(1) = vec_elem[shift_amount - 1];
+    let sticky_below_rounding =
+      if shift_amount == 1 then false
+      else (vec_elem << ('m - shift_amount + 1)) != zeros();
+    let discarded_nonzero = (vec_elem << ('m - shift_amount)) != zeros();
     match rounding_mode {
-      0b00 => vec_elem[shift_amount - 1],
-      0b01 => {
-        bool_to_bit(
-          vec_elem[shift_amount - 1] == 0b1 &
-          ((if shift_amount == 1 then false else vec_elem[shift_amount - 2 .. 0] != zeros()) | vec_elem[shift_amount] == 0b1))
-      },
+      0b00 => rounding_bit,
+      0b01 => bool_to_bit(rounding_bit == 0b1 & (sticky_below_rounding | shifted[0] == 0b1)),
       0b10 => 0b0,
-      0b11 => bool_to_bit(
-        vec_elem[shift_amount] != 0b1 & vec_elem[shift_amount - 1 .. 0] != zeros())
+      0b11 => bool_to_bit(shifted[0] != 0b1 & discarded_nonzero)
     }
   }
 }
