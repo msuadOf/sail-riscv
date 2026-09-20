@@ -48,6 +48,7 @@ mapping clause encdec = VVTYPE(funct6, vm, vs2, vs1, vd)
 function clause execute VVTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW_pow  = get_sew_pow();
   let SEW      = get_sew();
+  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
 
@@ -92,69 +93,106 @@ function clause execute VVTYPE(funct6, vm, vs2, vs1, vd) = {
   };
   var result = initial_result;
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
-        VV_VADD          => vs2_val[i] + vs1_val[i],
-        VV_VSUB          => vs2_val[i] - vs1_val[i],
-        VV_VAND          => vs2_val[i] & vs1_val[i],
-        VV_VOR           => vs2_val[i] | vs1_val[i],
-        VV_VXOR          => vs2_val[i] ^ vs1_val[i],
-        VV_VSADDU        => unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) + zero_extend('m + 1, vs1_val[i])),
-        VV_VSADD         => signed_saturation('m, sign_extend('m + 1, vs2_val[i]) + sign_extend('m + 1, vs1_val[i])),
-        VV_VSSUBU        => {
-                              if unsigned(vs2_val[i]) < unsigned(vs1_val[i]) then zeros()
-                              else unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) - zero_extend('m + 1, vs1_val[i]))
-                            },
-        VV_VSSUB         => signed_saturation('m, sign_extend('m + 1, vs2_val[i]) - sign_extend('m + 1, vs1_val[i])),
-        VV_VSMUL         => {
-                              let result_mul = to_bits_unsafe('m * 2, signed(vs2_val[i]) * signed(vs1_val[i]));
-                              let rounding_incr = get_fixed_rounding_incr(result_mul, 'm - 1);
-                              let result_wide = (result_mul >> ('m - 1)) + zero_extend('m * 2, rounding_incr);
-                              signed_saturation('m, result_wide['m..0])
-                            },
-        VV_VSLL          => {
-                              let shift_amount = get_shift_amount(vs1_val[i], SEW);
-                              vs2_val[i] << shift_amount
-                            },
-        VV_VSRL          => {
-                              let shift_amount = get_shift_amount(vs1_val[i], SEW);
-                              vs2_val[i] >> shift_amount
-                            },
-        VV_VSRA          => {
-                              let shift_amount = get_shift_amount(vs1_val[i], SEW);
-                              let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
-                              (v_double >> shift_amount)[SEW - 1 .. 0]
-                            },
-        VV_VSSRL         => {
-                              let shift_amount = get_shift_amount(vs1_val[i], SEW);
-                              let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
-                              (vs2_val[i] >> shift_amount) + zero_extend('m, rounding_incr)
-                            },
-        VV_VSSRA         => {
-                              let shift_amount = get_shift_amount(vs1_val[i], SEW);
-                              let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
-                              let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
-                              (v_double >> shift_amount)[SEW - 1 .. 0] + zero_extend('m, rounding_incr)
-                            },
-        VV_VMINU         => to_bits_unsafe(SEW, min(unsigned(vs2_val[i]), unsigned(vs1_val[i]))),
-        VV_VMIN          => to_bits_unsafe(SEW, min(signed(vs2_val[i]), signed(vs1_val[i]))),
-        VV_VMAXU         => to_bits_unsafe(SEW, max(unsigned(vs2_val[i]), unsigned(vs1_val[i]))),
-        VV_VMAX          => to_bits_unsafe(SEW, max(signed(vs2_val[i]), signed(vs1_val[i]))),
-        VV_VRGATHER      => {
-                              let idx = unsigned(vs1_val[i]);
-                              assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
-                              let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
-                              assert(VLMAX <= 'n);
-                              if idx < VLMAX then vs2_val[idx] else zeros()
-                            },
-        VV_VRGATHEREI16  => {
-                              let idx = unsigned(vs1_val_vrgatherei16[i]);
-                              assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
-                              let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
-                              assert(VLMAX <= 'n);
-                              if idx < VLMAX then vs2_val[idx] else zeros()
-                            }
+  match funct6 {
+    VV_VADD => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] + vs1_val[i], result[i])
+    },
+    VV_VSUB => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] - vs1_val[i], result[i])
+    },
+    VV_VAND => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] & vs1_val[i], result[i])
+    },
+    VV_VOR => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] | vs1_val[i], result[i])
+    },
+    VV_VXOR => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] ^ vs1_val[i], result[i])
+    },
+    VV_VSADDU => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) + zero_extend('m + 1, vs1_val[i]))
+    },
+    VV_VSADD => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = signed_saturation('m, sign_extend('m + 1, vs2_val[i]) + sign_extend('m + 1, vs1_val[i]))
+    },
+    VV_VSSUBU => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = if unsigned(vs2_val[i]) < unsigned(vs1_val[i]) then zeros()
+                    else unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) - zero_extend('m + 1, vs1_val[i]))
+      }
+    },
+    VV_VSSUB => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = signed_saturation('m, sign_extend('m + 1, vs2_val[i]) - sign_extend('m + 1, vs1_val[i]))
+    },
+    VV_VSMUL => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        let result_mul = to_bits_unsafe('m * 2, signed(vs2_val[i]) * signed(vs1_val[i]));
+        let rounding_incr = get_fixed_rounding_incr(result_mul, 'm - 1);
+        let result_wide = (result_mul >> ('m - 1)) + zero_extend('m * 2, rounding_incr);
+        result[i] = signed_saturation('m, result_wide['m..0])
+      }
+    },
+    VV_VSLL => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(vs1_val[i], SEW);
+      result[i] = masked_select(mask[i], vs2_val[i] << shift_amount, result[i])
+    },
+    VV_VSRL => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(vs1_val[i], SEW);
+      result[i] = masked_select(mask[i], vs2_val[i] >> shift_amount, result[i])
+    },
+    VV_VSRA => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(vs1_val[i], SEW);
+      let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
+      result[i] = masked_select(mask[i], (v_double >> shift_amount)[SEW - 1 .. 0], result[i])
+    },
+    VV_VSSRL => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(vs1_val[i], SEW);
+      let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+      let shifted = (vs2_val[i] >> shift_amount) + zero_extend('m, rounding_incr);
+      result[i] = masked_select(mask[i], shifted, result[i])
+    },
+    VV_VSSRA => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(vs1_val[i], SEW);
+      let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+      let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
+      let shifted = (v_double >> shift_amount)[SEW - 1 .. 0] + zero_extend('m, rounding_incr);
+      result[i] = masked_select(mask[i], shifted, result[i])
+    },
+    VV_VMINU => foreach (i from 0 to (num_elem - 1)) {
+      let minimum = to_bits_unsafe(SEW, min(unsigned(vs2_val[i]), unsigned(vs1_val[i])));
+      result[i] = masked_select(mask[i], minimum, result[i])
+    },
+    VV_VMIN => foreach (i from 0 to (num_elem - 1)) {
+      let minimum = to_bits_unsafe(SEW, min(signed(vs2_val[i]), signed(vs1_val[i])));
+      result[i] = masked_select(mask[i], minimum, result[i])
+    },
+    VV_VMAXU => foreach (i from 0 to (num_elem - 1)) {
+      let maximum = to_bits_unsafe(SEW, max(unsigned(vs2_val[i]), unsigned(vs1_val[i])));
+      result[i] = masked_select(mask[i], maximum, result[i])
+    },
+    VV_VMAX => foreach (i from 0 to (num_elem - 1)) {
+      let maximum = to_bits_unsafe(SEW, max(signed(vs2_val[i]), signed(vs1_val[i])));
+      result[i] = masked_select(mask[i], maximum, result[i])
+    },
+    VV_VRGATHER => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        let idx = unsigned(vs1_val[i]);
+        assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+        let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+        assert(VLMAX <= 'n);
+        result[i] = if idx < VLMAX then vs2_val[idx] else zeros()
+      }
+    },
+    VV_VRGATHEREI16 => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        let idx = unsigned(vs1_val_vrgatherei16[i]);
+        assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+        let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+        assert(VLMAX <= 'n);
+        result[i] = if idx < VLMAX then vs2_val[idx] else zeros()
       }
     }
   };
@@ -239,8 +277,7 @@ function clause execute NVSTYPE(funct6, vm, vs2, vs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         NVS_VNSRL  => {
                         let shift_amount = get_shift_amount(vs1_val[i], SEW_widen);
                         (vs2_val[i] >> shift_amount)[SEW - 1 .. 0]
@@ -251,8 +288,7 @@ function clause execute NVSTYPE(funct6, vm, vs2, vs1, vd) = {
                         let arith_shifted : bits('o) = (v_double >> shift_amount)[SEW_widen - 1 .. 0];
                         (arith_shifted)[SEW - 1 .. 0]
                       }
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -392,7 +428,7 @@ function clause execute MASKTYPEV(vs2, vs1, vd) = {
       }
     } else {
       // the merge operates on all body elements
-      result[i] = if vm_val[i] == 0b1 then vs1_val[i] else vs2_val[i]
+      result[i] = masked_select(vm_val[i], vs1_val[i], vs2_val[i])
     }
   };
 
@@ -437,7 +473,7 @@ function clause execute MOVETYPEV(vs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then result[i] = vs1_val[i]
+    result[i] = masked_select(mask[i], vs1_val[i], result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -532,57 +568,92 @@ function clause execute VXTYPE(funct6, vm, vs2, rs1, vd) = {
   };
   var result = initial_result;
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
-        VX_VADD    => vs2_val[i] + rs1_val,
-        VX_VSUB    => vs2_val[i] - rs1_val,
-        VX_VRSUB   => rs1_val - vs2_val[i],
-        VX_VAND    => vs2_val[i] & rs1_val,
-        VX_VOR     => vs2_val[i] | rs1_val,
-        VX_VXOR    => vs2_val[i] ^ rs1_val,
-        VX_VSADDU  => unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) + zero_extend('m + 1, rs1_val) ),
-        VX_VSADD   => signed_saturation('m, sign_extend('m + 1, vs2_val[i]) + sign_extend('m + 1, rs1_val) ),
-        VX_VSSUBU  => {
-                        if unsigned(vs2_val[i]) < unsigned(rs1_val) then zeros()
-                        else unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) - zero_extend('m + 1, rs1_val) )
-                      },
-        VX_VSSUB   => signed_saturation('m, sign_extend('m + 1, vs2_val[i]) - sign_extend('m + 1, rs1_val) ),
-        VX_VSMUL   => {
-                        let result_mul = to_bits_unsafe('m * 2, signed(vs2_val[i]) * signed(rs1_val));
-                        let rounding_incr = get_fixed_rounding_incr(result_mul, 'm - 1);
-                        let result_wide = (result_mul >> ('m - 1)) + zero_extend('m * 2, rounding_incr);
-                        signed_saturation('m, result_wide['m..0])
-                      },
-        VX_VSLL    => {
-                        let shift_amount = get_shift_amount(rs1_val, SEW);
-                        vs2_val[i] << shift_amount
-                      },
-        VX_VSRL    => {
-                        let shift_amount = get_shift_amount(rs1_val, SEW);
-                        vs2_val[i] >> shift_amount
-                      },
-        VX_VSRA    => {
-                        let shift_amount = get_shift_amount(rs1_val, SEW);
-                        let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
-                        (v_double >> shift_amount)[SEW - 1 .. 0]
-                      },
-        VX_VSSRL   => {
-                        let shift_amount = get_shift_amount(rs1_val, SEW);
-                        let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
-                        (vs2_val[i] >> shift_amount) + zero_extend('m, rounding_incr)
-                      },
-        VX_VSSRA   => {
-                        let shift_amount = get_shift_amount(rs1_val, SEW);
-                        let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
-                        let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
-                        (v_double >> shift_amount)[SEW - 1 .. 0] + zero_extend('m, rounding_incr)
-                      },
-        VX_VMINU   => to_bits_unsafe(SEW, min(unsigned(vs2_val[i]), unsigned(rs1_val))),
-        VX_VMIN    => to_bits_unsafe(SEW, min(signed(vs2_val[i]), signed(rs1_val))),
-        VX_VMAXU   => to_bits_unsafe(SEW, max(unsigned(vs2_val[i]), unsigned(rs1_val))),
-        VX_VMAX    => to_bits_unsafe(SEW, max(signed(vs2_val[i]), signed(rs1_val)))
+  match funct6 {
+    VX_VADD => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] + rs1_val, result[i])
+    },
+    VX_VSUB => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] - rs1_val, result[i])
+    },
+    VX_VRSUB => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], rs1_val - vs2_val[i], result[i])
+    },
+    VX_VAND => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] & rs1_val, result[i])
+    },
+    VX_VOR => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] | rs1_val, result[i])
+    },
+    VX_VXOR => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] ^ rs1_val, result[i])
+    },
+    VX_VSADDU => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) + zero_extend('m + 1, rs1_val))
+    },
+    VX_VSADD => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = signed_saturation('m, sign_extend('m + 1, vs2_val[i]) + sign_extend('m + 1, rs1_val))
+    },
+    VX_VSSUBU => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        result[i] = if unsigned(vs2_val[i]) < unsigned(rs1_val) then zeros()
+                    else unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) - zero_extend('m + 1, rs1_val))
       }
+    },
+    VX_VSSUB => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = signed_saturation('m, sign_extend('m + 1, vs2_val[i]) - sign_extend('m + 1, rs1_val))
+    },
+    VX_VSMUL => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then {
+        let result_mul = to_bits_unsafe('m * 2, signed(vs2_val[i]) * signed(rs1_val));
+        let rounding_incr = get_fixed_rounding_incr(result_mul, 'm - 1);
+        let result_wide = (result_mul >> ('m - 1)) + zero_extend('m * 2, rounding_incr);
+        result[i] = signed_saturation('m, result_wide['m..0])
+      }
+    },
+    VX_VSLL => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(rs1_val, SEW);
+      result[i] = masked_select(mask[i], vs2_val[i] << shift_amount, result[i])
+    },
+    VX_VSRL => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(rs1_val, SEW);
+      result[i] = masked_select(mask[i], vs2_val[i] >> shift_amount, result[i])
+    },
+    VX_VSRA => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(rs1_val, SEW);
+      let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
+      result[i] = masked_select(mask[i], (v_double >> shift_amount)[SEW - 1 .. 0], result[i])
+    },
+    VX_VSSRL => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(rs1_val, SEW);
+      let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+      let shifted = (vs2_val[i] >> shift_amount) + zero_extend('m, rounding_incr);
+      result[i] = masked_select(mask[i], shifted, result[i])
+    },
+    VX_VSSRA => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(rs1_val, SEW);
+      let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+      let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
+      let shifted = (v_double >> shift_amount)[SEW - 1 .. 0] + zero_extend('m, rounding_incr);
+      result[i] = masked_select(mask[i], shifted, result[i])
+    },
+    VX_VMINU => foreach (i from 0 to (num_elem - 1)) {
+      let minimum = to_bits_unsafe(SEW, min(unsigned(vs2_val[i]), unsigned(rs1_val)));
+      result[i] = masked_select(mask[i], minimum, result[i])
+    },
+    VX_VMIN => foreach (i from 0 to (num_elem - 1)) {
+      let minimum = to_bits_unsafe(SEW, min(signed(vs2_val[i]), signed(rs1_val)));
+      result[i] = masked_select(mask[i], minimum, result[i])
+    },
+    VX_VMAXU => foreach (i from 0 to (num_elem - 1)) {
+      let maximum = to_bits_unsafe(SEW, max(unsigned(vs2_val[i]), unsigned(rs1_val)));
+      result[i] = masked_select(mask[i], maximum, result[i])
+    },
+    VX_VMAX => foreach (i from 0 to (num_elem - 1)) {
+      let maximum = to_bits_unsafe(SEW, max(signed(vs2_val[i]), signed(rs1_val)));
+      result[i] = masked_select(mask[i], maximum, result[i])
     }
   };
 
@@ -664,8 +735,7 @@ function clause execute NXSTYPE(funct6, vm, vs2, rs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         NXS_VNSRL  => {
                         let shift_amount = get_shift_amount(rs1_val, SEW_widen);
                         (vs2_val[i] >> shift_amount)[SEW - 1 .. 0]
@@ -676,8 +746,7 @@ function clause execute NXSTYPE(funct6, vm, vs2, rs1, vd) = {
                         let arith_shifted : bits('o) = (v_double >> shift_amount)[SEW_widen - 1 .. 0];
                         arith_shifted[SEW - 1 .. 0]
                       }
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -820,8 +889,7 @@ function clause execute VXSG(funct6, vm, vs2, rs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         VX_VSLIDEUP    => {
                             if i >= rs1_val then vs2_val[i - rs1_val] else vd_val[i]
                           },
@@ -837,8 +905,7 @@ function clause execute VXSG(funct6, vm, vs2, rs1, vd) = {
                             assert(VLMAX > 0 & VLMAX <= 'n);
                             if rs1_val < VLMAX then vs2_val[rs1_val] else zeros()
                           }
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -902,7 +969,7 @@ function clause execute MASKTYPEX(vs2, rs1, vd) = {
       }
     } else {
       // the merge operates on all body elements
-      result[i] = if vm_val[i] == 0b1 then rs1_val else vs2_val[i]
+      result[i] = masked_select(vm_val[i], rs1_val, vs2_val[i])
     }
   };
 
@@ -1007,41 +1074,55 @@ function clause execute VITYPE(funct6, vm, vs2, simm, vd) = {
   };
   var result = initial_result;
 
-  foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
-        VI_VADD    => vs2_val[i] + imm_val,
-        VI_VRSUB   => imm_val - vs2_val[i],
-        VI_VAND    => vs2_val[i] & imm_val,
-        VI_VOR     => vs2_val[i] | imm_val,
-        VI_VXOR    => vs2_val[i] ^ imm_val,
-        VI_VSADDU  => unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) + zero_extend('m + 1, imm_val) ),
-        VI_VSADD   => signed_saturation('m, sign_extend('m + 1, vs2_val[i]) + sign_extend('m + 1, imm_val) ),
-        VI_VSLL    => {
-                        let shift_amount = get_shift_amount(zero_extend('m, simm), SEW);
-                        vs2_val[i] << shift_amount
-                      },
-        VI_VSRL    => {
-                        let shift_amount = get_shift_amount(zero_extend('m, simm), SEW);
-                        vs2_val[i] >> shift_amount
-                      },
-        VI_VSRA    => {
-                        let shift_amount = get_shift_amount(zero_extend('m, simm), SEW);
-                        let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
-                        (v_double >> shift_amount)[SEW - 1 .. 0]
-                      },
-        VI_VSSRL   => {
-                        let shift_amount = get_shift_amount(zero_extend('m, simm), SEW);
-                        let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
-                        (vs2_val[i] >> shift_amount) + zero_extend('m, rounding_incr)
-                      },
-        VI_VSSRA   => {
-                        let shift_amount = get_shift_amount(zero_extend('m, simm), SEW);
-                        let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
-                        let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
-                        (v_double >> shift_amount)[SEW - 1 .. 0] + zero_extend('m, rounding_incr)
-                      }
-      }
+  match funct6 {
+    VI_VADD => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] + imm_val, result[i])
+    },
+    VI_VRSUB => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], imm_val - vs2_val[i], result[i])
+    },
+    VI_VAND => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] & imm_val, result[i])
+    },
+    VI_VOR => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] | imm_val, result[i])
+    },
+    VI_VXOR => foreach (i from 0 to (num_elem - 1)) {
+      result[i] = masked_select(mask[i], vs2_val[i] ^ imm_val, result[i])
+    },
+    VI_VSADDU => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = unsigned_saturation('m, zero_extend('m + 1, vs2_val[i]) + zero_extend('m + 1, imm_val))
+    },
+    VI_VSADD => foreach (i from 0 to (num_elem - 1)) {
+      if mask[i] == 0b1 then
+        result[i] = signed_saturation('m, sign_extend('m + 1, vs2_val[i]) + sign_extend('m + 1, imm_val))
+    },
+    VI_VSLL => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(zero_extend('m, simm), SEW);
+      result[i] = masked_select(mask[i], vs2_val[i] << shift_amount, result[i])
+    },
+    VI_VSRL => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(zero_extend('m, simm), SEW);
+      result[i] = masked_select(mask[i], vs2_val[i] >> shift_amount, result[i])
+    },
+    VI_VSRA => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(zero_extend('m, simm), SEW);
+      let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
+      result[i] = masked_select(mask[i], (v_double >> shift_amount)[SEW - 1 .. 0], result[i])
+    },
+    VI_VSSRL => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(zero_extend('m, simm), SEW);
+      let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+      let shifted = (vs2_val[i] >> shift_amount) + zero_extend('m, rounding_incr);
+      result[i] = masked_select(mask[i], shifted, result[i])
+    },
+    VI_VSSRA => foreach (i from 0 to (num_elem - 1)) {
+      let shift_amount = get_shift_amount(zero_extend('m, simm), SEW);
+      let rounding_incr = get_fixed_rounding_incr(vs2_val[i], shift_amount);
+      let v_double : bits('m * 2) = sign_extend(vs2_val[i]);
+      let shifted = (v_double >> shift_amount)[SEW - 1 .. 0] + zero_extend('m, rounding_incr);
+      result[i] = masked_select(mask[i], shifted, result[i])
     }
   };
 
@@ -1115,8 +1196,7 @@ function clause execute NISTYPE(funct6, vm, vs2, uimm, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         NIS_VNSRL  => {
                         let shift_amount = get_shift_amount(imm_val, SEW_widen);
                         (vs2_val[i] >> shift_amount)[SEW - 1 .. 0]
@@ -1127,8 +1207,7 @@ function clause execute NISTYPE(funct6, vm, vs2, uimm, vd) = {
                         let arith_shifted : bits('o) = (v_double >> shift_amount)[SEW_widen - 1 .. 0];
                         (arith_shifted)[SEW - 1 .. 0]
                       }
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -1271,8 +1350,7 @@ function clause execute VISG(funct6, vm, vs2, simm, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         VI_VSLIDEUP    => {
                             if i >= imm_val then vs2_val[i - imm_val] else vd_val[i]
                           },
@@ -1288,8 +1366,7 @@ function clause execute VISG(funct6, vm, vs2, simm, vd) = {
                             assert(VLMAX > 0 & VLMAX <= 'n);
                             if imm_val < VLMAX then vs2_val[imm_val] else zeros()
                           }
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -1352,7 +1429,7 @@ function clause execute MASKTYPEI(vs2, simm, vd) = {
       }
     } else {
       // the merge operates on all body elements
-      result[i] = if vm_val[i] == 0b1 then imm_val else vs2_val[i]
+      result[i] = masked_select(vm_val[i], imm_val, vs2_val[i])
     }
   };
 
@@ -1377,7 +1454,7 @@ function masktypei_result(num_elem, start_element, end_element, real_num_elem, v
       }
     } else {
       // the merge operates on all body elements
-      result[i] = if vm_val[i] == 0b1 then scalar_val else vs2_val[i]
+      result[i] = masked_select(vm_val[i], scalar_val, vs2_val[i])
     }
   };
   result
@@ -1578,8 +1655,7 @@ function clause execute MVVTYPE(funct6, vm, vs2, vs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         MVV_VAADDU   => {
                           let result_add = zero_extend('m + 1, vs2_val[i]) + zero_extend('m + 1, vs1_val[i]);
                           let rounding_incr = get_fixed_rounding_incr(result_add, 1);
@@ -1634,8 +1710,7 @@ function clause execute MVVTYPE(funct6, vm, vs2, vs1, vd) = {
                           // signed overflow case returns zero naturally as required due to -1 divisor
                           to_bits_unsafe(SEW, r)
                         }
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -1703,14 +1778,12 @@ function clause execute MVVMATYPE(funct6, vm, vs2, vs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         MVV_VMACC  => mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vs2_val[i], Low) + vd_val[i],
         MVV_VNMSAC => vd_val[i] - mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vs2_val[i], Low),
         MVV_VMADD  => mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vd_val[i], Low) + vs2_val[i],
         MVV_VNMSUB => vs2_val[i] - mult_to_bits_half(SEW, Signed, Signed, vs1_val[i], vd_val[i], Low),
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -1779,8 +1852,7 @@ function clause execute WVVTYPE(funct6, vm, vs2, vs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         WVV_VADD    => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) + signed(vs1_val[i])),
         WVV_VSUB    => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) - signed(vs1_val[i])),
         WVV_VADDU   => to_bits_unsafe(SEW_widen, unsigned(vs2_val[i]) + unsigned(vs1_val[i])),
@@ -1788,8 +1860,7 @@ function clause execute WVVTYPE(funct6, vm, vs2, vs1, vd) = {
         WVV_VWMUL   => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) * signed(vs1_val[i])),
         WVV_VWMULU  => to_bits_unsafe(SEW_widen, unsigned(vs2_val[i]) * unsigned(vs1_val[i])),
         WVV_VWMULSU => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) * unsigned(vs1_val[i]))
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -1859,14 +1930,12 @@ function clause execute WVTYPE(funct6, vm, vs2, vs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         WV_VADD  => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) + signed(vs1_val[i])),
         WV_VSUB  => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) - signed(vs1_val[i])),
         WV_VADDU => to_bits_unsafe(SEW_widen, unsigned(vs2_val[i]) + unsigned(vs1_val[i])),
         WV_VSUBU => to_bits_unsafe(SEW_widen, unsigned(vs2_val[i]) - unsigned(vs1_val[i]))
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -1933,13 +2002,11 @@ function clause execute WMVVTYPE(funct6, vm, vs2, vs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         WMVV_VWMACC   => to_bits_unsafe(SEW_widen, signed(vs1_val[i]) * signed(vs2_val[i])) + vd_val[i],
         WMVV_VWMACCU  => to_bits_unsafe(SEW_widen, unsigned(vs1_val[i]) * unsigned(vs2_val[i])) + vd_val[i],
         WMVV_VWMACCSU => to_bits_unsafe(SEW_widen, signed(vs1_val[i]) * unsigned(vs2_val[i]))+ vd_val[i]
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -2011,16 +2078,14 @@ function clause execute VEXTTYPE(funct6, vm, vs2, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         VEXT2_ZVF2 => zero_extend(vs2_val[i]),
         VEXT2_SVF2 => sign_extend(vs2_val[i]),
         VEXT4_ZVF4 => zero_extend(vs2_val[i]),
         VEXT4_SVF4 => sign_extend(vs2_val[i]),
         VEXT8_ZVF8 => zero_extend(vs2_val[i]),
         VEXT8_SVF8 => sign_extend(vs2_val[i]),
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -2194,8 +2259,7 @@ function clause execute MVXTYPE(funct6, vm, vs2, rs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         MVX_VAADDU       => {
                               let result_add = zero_extend('m + 1, vs2_val[i]) + zero_extend('m + 1, rs1_val);
                               let rounding_incr = get_fixed_rounding_incr(result_add, 1);
@@ -2259,8 +2323,7 @@ function clause execute MVXTYPE(funct6, vm, vs2, rs1, vd) = {
                               // signed overflow case returns zero naturally as required due to -1 divisor
                               to_bits_unsafe(SEW, r)
                             }
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -2329,14 +2392,12 @@ function clause execute MVXMATYPE(funct6, vm, vs2, rs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         MVX_VMACC  => mult_to_bits_half(SEW, Signed, Signed, rs1_val, vs2_val[i], Low) + vd_val[i],
         MVX_VNMSAC => vd_val[i] - mult_to_bits_half(SEW, Signed, Signed, rs1_val, vs2_val[i], Low),
         MVX_VMADD  => mult_to_bits_half(SEW, Signed, Signed, rs1_val, vd_val[i], Low) + vs2_val[i],
         MVX_VNMSUB => vs2_val[i] - mult_to_bits_half(SEW, Signed, Signed, rs1_val, vd_val[i], Low)
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -2405,8 +2466,7 @@ function clause execute WVXTYPE(funct6, vm, vs2, rs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         WVX_VADD    => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) + signed(rs1_val)),
         WVX_VSUB    => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) - signed(rs1_val)),
         WVX_VADDU   => to_bits_unsafe(SEW_widen, unsigned(vs2_val[i]) + unsigned(rs1_val)),
@@ -2414,8 +2474,7 @@ function clause execute WVXTYPE(funct6, vm, vs2, rs1, vd) = {
         WVX_VWMUL   => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) * signed(rs1_val)),
         WVX_VWMULU  => to_bits_unsafe(SEW_widen, unsigned(vs2_val[i]) * unsigned(rs1_val)),
         WVX_VWMULSU => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) * unsigned(rs1_val))
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -2485,14 +2544,12 @@ function clause execute WXTYPE(funct6, vm, vs2, rs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         WX_VADD  => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) + signed(rs1_val)),
         WX_VSUB  => to_bits_unsafe(SEW_widen, signed(vs2_val[i]) - signed(rs1_val)),
         WX_VADDU => to_bits_unsafe(SEW_widen, unsigned(vs2_val[i]) + unsigned(rs1_val)),
         WX_VSUBU => to_bits_unsafe(SEW_widen, unsigned(vs2_val[i]) - unsigned(rs1_val))
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -2559,14 +2616,12 @@ function clause execute WMVXTYPE(funct6, vm, vs2, rs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         WMVX_VWMACCU  => (to_bits_unsafe(SEW_widen, unsigned(rs1_val) * unsigned(vs2_val[i]) )) + vd_val[i],
         WMVX_VWMACC   => (to_bits_unsafe(SEW_widen, signed(rs1_val) * signed(vs2_val[i]) )) + vd_val[i],
         WMVX_VWMACCUS => (to_bits_unsafe(SEW_widen, unsigned(rs1_val) * signed(vs2_val[i]) ))+ vd_val[i],
         WMVX_VWMACCSU => (to_bits_unsafe(SEW_widen, signed(rs1_val) * unsigned(vs2_val[i]) ))+ vd_val[i]
-      }
-    }
+      }, result[i])
   };
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);

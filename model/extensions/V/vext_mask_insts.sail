@@ -51,8 +51,7 @@ function clause execute MMTYPE(funct6, vs2, vs1, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = match funct6 {
+    result[i] = masked_select(mask[i], match funct6 {
         MM_VMAND     => (vs2_val & vs1_val)[i],
         MM_VMNAND    => ~(vs2_val & vs1_val)[i],
         MM_VMANDN    => (vs2_val & ~(vs1_val))[i],
@@ -61,8 +60,7 @@ function clause execute MMTYPE(funct6, vs2, vs1, vd) = {
         MM_VMNOR     => (~(vs2_val | vs1_val))[i],
         MM_VMORN     => (vs2_val | ~(vs1_val))[i],
         MM_VMXNOR    => (~(vs2_val ^ vs1_val))[i]
-      }
-    }
+      }, result[i])
   };
 
   write_vmask(num_elem, vd, result);
@@ -380,7 +378,7 @@ function clause execute VID_V(vm, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then result[i] = to_bits_unsafe(SEW, i)
+    result[i] = masked_select(mask[i], to_bits_unsafe(SEW, i), result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -390,3 +388,4 @@ function clause execute VID_V(vm, vd) = {
 
 mapping clause assembly = VID_V(vm, vd)
   <-> "vid.v" ^ spc() ^ vreg_name(vd) ^ maybe_vmask(vm)
+

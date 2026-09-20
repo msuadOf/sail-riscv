@@ -749,28 +749,37 @@ function get_fixed_rounding_incr(vec_elem, shift_amount) = {
 }
 
 // Fixed point unsigned saturation
-val unsigned_saturation : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> bits('m)
-function unsigned_saturation(len, elem) = {
-  if unsigned(elem) > unsigned(ones('m)) then {
-    vcsr[vxsat] = 0b1;
-    ones('m)
-  } else {
-    elem['m - 1 .. 0]
-  }
+val unsigned_saturation_result : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> (bits('m), bits(1))
+function unsigned_saturation_result(len, elem) = {
+  let truncated : bits('m) = elem['m - 1 .. 0];
+  let extended : bits('n) = zero_extend(truncated);
+  let difference : bits('n) = elem ^ extended;
+  let saturated : bits(1) = (difference | (zeros('n) - difference))['n - 1];
+  (masked_select(saturated, ones('m), truncated), saturated)
 }
 
-// Fixed point signed saturation
+val unsigned_saturation : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> bits('m)
+function unsigned_saturation(len, elem) = {
+  let (result, saturated) = unsigned_saturation_result(len, elem);
+  vcsr[vxsat] = vcsr[vxsat] | saturated;
+  result
+}
+
+val signed_saturation_result : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> (bits('m), bits(1))
+function signed_saturation_result(len, elem) = {
+  let truncated : bits('m) = elem['m - 1 .. 0];
+  let extended : bits('n) = sign_extend(truncated);
+  let difference : bits('n) = elem ^ extended;
+  let saturated : bits(1) = (difference | (zeros('n) - difference))['n - 1];
+  let saturation_value = masked_select(elem['n - 1], 0b1 @ zeros('m - 1), 0b0 @ ones('m - 1));
+  (masked_select(saturated, saturation_value, truncated), saturated)
+}
+
 val signed_saturation : forall ('m 'n: Int), ('n >= 'm > 1). (int('m), bits('n)) -> bits('m)
 function signed_saturation(len, elem) = {
-  if signed(elem) > signed(0b0 @ ones('m - 1)) then {
-    vcsr[vxsat] = 0b1;
-    0b0 @ ones('m - 1)
-  } else if signed(elem) < signed(0b1 @ zeros('m - 1)) then {
-    vcsr[vxsat] = 0b1;
-    0b1 @ zeros('m - 1)
-  } else {
-    elem['m - 1 .. 0]
-  };
+  let (result, saturated) = signed_saturation_result(len, elem);
+  vcsr[vxsat] = vcsr[vxsat] | saturated;
+  result
 }
 
 // The parameter m is implicit to help proof the proof assistant backends infer its value.
