@@ -333,10 +333,8 @@ function read_single_element(EEW, index, vrid) = {
   V(vrid)[(offset + EEW - 1) .. offset]
 }
 
-$ifndef SYMBOLIC
-// The general vreg reading operation with num_elem as max(VLMAX,VLEN/SEW)).
-val read_vreg : forall 'n 'sew 'p, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), int('p), vregidx) -> vector('n, bits('sew))
-function read_vreg(num_elem, SEW, LMUL_pow, vrid) = {
+val read_vreg_default : forall 'n 'sew 'p, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), int('p), vregidx) -> vector('n, bits('sew))
+function read_vreg_default(num_elem, SEW, LMUL_pow, vrid) = {
   assert_vector_num_elem(num_elem);
   assert_lmul_pow(LMUL_pow);
   let vrid_val = unsigned(vregidx_bits(vrid));
@@ -354,7 +352,8 @@ function read_vreg(num_elem, SEW, LMUL_pow, vrid) = {
 
   result
 }
-$else
+
+$ifdef SYMBOLIC
 val isla_read_vreg = pure "isla_read_vreg" :
   forall 'n 'sew, 'n >= 0 & is_sew_bitsize('sew) .
   (int('n), int('sew), int, vlenbits, vlenbits, vlenbits, vlenbits, vlenbits, vlenbits, vlenbits, vlenbits) -> vector('n, bits('sew))
@@ -398,32 +397,17 @@ function read_vreg_extra_by_sew(num_elem, SEW, LMUL_pow, vrid) = {
 }
 
 val isla_pack_vreg = pure "isla_pack_vreg" : forall 'n 'sew, 'n >= 0 & is_sew_bitsize('sew) . (int('sew), int, vector('n, bits('sew))) -> vector(8, vlenbits)
+$endif
 
 // The general vreg reading operation with num_elem as max(VLMAX,VLEN/SEW)).
-val read_vreg_default : forall 'n 'sew 'p, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), int('p), vregidx) -> vector('n, bits('sew))
-function read_vreg_default(num_elem, SEW, LMUL_pow, vrid) = {
-  assert_vector_num_elem(num_elem);
-  assert_lmul_pow(LMUL_pow);
-  let vrid_val = unsigned(vregidx_bits(vrid));
-  let LMUL_pow_reg = if LMUL_pow < 0 then 0 else LMUL_pow;
-  let LMUL = 2 ^ LMUL_pow_reg;
-  let vrid_end = vrid_val + LMUL;
-  assert(vrid_end <= 32, "Invalid register group: group " ^ dec_str(vrid_val) ^ " ends at " ^ dec_str(vrid_end) ^ " and overflows the largest register number (32).");
-  assert(vrid_val % LMUL == 0, "Invalid register group: group " ^ dec_str(vrid_val) ^ " is not a multiple of its EMUL " ^ dec_str(LMUL) ^ ".");
-
-  var result : vector('n, bits('sew)) = vector_init(zeros());
-
-  foreach (i from 0 to (num_elem - 1)) {
-    result[i] = read_single_element(SEW, i, vrid)
-  };
-
-  result
-}
-
 val read_vreg : forall 'n 'sew 'p, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), int('p), vregidx) -> vector('n, bits('sew))
+$ifdef SYMBOLIC
 function read_vreg(num_elem, SEW, LMUL_pow, vrid) =
   if __isla_use_extra_ops then read_vreg_extra_by_sew(num_elem, SEW, LMUL_pow, vrid)
   else read_vreg_default(num_elem, SEW, LMUL_pow, vrid)
+$else
+function read_vreg(num_elem, SEW, LMUL_pow, vrid) =
+  read_vreg_default(num_elem, SEW, LMUL_pow, vrid)
 $endif
 
 // Write a single element of a vector register group (starting at vrid),
@@ -460,41 +444,6 @@ function write_single_element(EEW, index, vrid, value) = {
 // vrid:     Index of the first register in the group.
 // data:     Data of each element.
 //
-$ifndef SYMBOLIC
-val write_vreg : forall 'n 'sew, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), LMUL_pow, vregidx, vector('n, bits('sew))) -> unit
-function write_vreg(num_elem, SEW, LMUL_pow, vrid, vec) = {
-  assert_vector_num_elem(num_elem);
-  assert_sew(SEW);
-  assert_lmul_pow(LMUL_pow);
-  // Number of registers in the group (treating fractional lmul as 0).
-  let group_size = 2 ^ max(LMUL_pow, 0);
-
-  assert(SEW <= vlen);
-  static_assert(vlen % SEW == 0);
-
-  // Number of SEW-bit elements per vector register.
-  let elem_per_reg = vlen / SEW;
-
-  // Normally num_elem == group_size * elem_per_reg, however
-  // in the specific case of fractional lmul with widening instructions
-  // get_num_elem() returns vlen / SEW, but SEW is doubled before
-  // feeding into this instruction, so elem_per_reg is half the
-  // pre-widening value. Since `group_size` will be unchanged
-  // (because max(LMUL_pow, 0) is still 0), we will end up
-  // with num_elem == group_size * (elem_per_reg * 2).
-  //
-  // In that case the second half of the `vec` array will be ignored.
-  assert(num_elem == group_size * elem_per_reg | num_elem == 2 * group_size * elem_per_reg);
-
-  foreach (reg_in_group from 0 to (group_size - 1)) {
-    var reg_value : vlenbits = zeros();
-    foreach (i_elem from 0 to (elem_per_reg - 1)) {
-      reg_value[(i_elem * SEW) + SEW - 1 .. (i_elem * SEW)] = vec[reg_in_group * elem_per_reg + i_elem];
-    };
-    V(vrid + reg_in_group) = reg_value;
-  }
-}
-$else
 val write_vreg_default : forall 'n 'sew, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), LMUL_pow, vregidx, vector('n, bits('sew))) -> unit
 function write_vreg_default(num_elem, SEW, LMUL_pow, vrid, vec) = {
   assert_vector_num_elem(num_elem);
@@ -529,6 +478,7 @@ function write_vreg_default(num_elem, SEW, LMUL_pow, vrid, vec) = {
   }
 }
 
+$ifdef SYMBOLIC
 val write_vreg_extra : forall 'n 'sew, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), LMUL_pow, vregidx, vector('n, bits('sew))) -> unit
 function write_vreg_extra(num_elem, SEW, LMUL_pow, vrid, vec) = {
   assert_vector_num_elem(num_elem);
@@ -545,11 +495,16 @@ function write_vreg_extra(num_elem, SEW, LMUL_pow, vrid, vec) = {
   if group_size > 6 then V(vrid + 6) = packed[6];
   if group_size > 7 then V(vrid + 7) = packed[7]
 }
+$endif
 
 val write_vreg : forall 'n 'sew, 'n >= 0 & is_sew_bitsize('sew) . (int('n), int('sew), LMUL_pow, vregidx, vector('n, bits('sew))) -> unit
+$ifdef SYMBOLIC
 function write_vreg(num_elem, SEW, LMUL_pow, vrid, vec) =
   if __isla_use_extra_ops then write_vreg_extra(num_elem, SEW, LMUL_pow, vrid, vec)
   else write_vreg_default(num_elem, SEW, LMUL_pow, vrid, vec)
+$else
+function write_vreg(num_elem, SEW, LMUL_pow, vrid, vec) =
+  write_vreg_default(num_elem, SEW, LMUL_pow, vrid, vec)
 $endif
 
 // Mask register reading operation with num_elem as max(VLMAX,vlen/SEW)).

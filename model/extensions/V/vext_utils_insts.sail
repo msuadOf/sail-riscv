@@ -294,66 +294,6 @@ function get_end_element() -> int = unsigned(vl) - 1
 //   vector1 is the result vector with values applied to masked elements
 //   vector2 is a "mask" vector that is true for an element if the corresponding element
 //     in the result vector should be updated by the calling instruction
-$ifndef SYMBOLIC
-val init_masked_result : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), int('p), vector('n, bits('m)), bits('n)) -> result((vector('n, bits('m)), bits('n)), unit)
-function init_masked_result(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
-  assert_vector_num_elem(num_elem);
-  assert_lmul_pow(LMUL_pow);
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Err(())
-  };
-  let end_element   = get_end_element();
-  let tail_ag : agtype = get_vtype_vta();
-  let mask_ag : agtype = get_vtype_vma();
-  var mask : bits('n) = undefined;
-  var result : vector('n, bits('m)) = undefined;
-
-  // Determine the actual number of elements when lmul < 1
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
-  assert(num_elem >= real_num_elem);
-
-  foreach (i from 0 to (num_elem - 1)) {
-    if i < start_element then {
-      // Prestart elements defined by vstart
-      result[i] = vd_val[i];
-      mask[i] = 0b0
-    } else if i > end_element then {
-      // Tail elements defined by vl
-      result[i] = match tail_ag {
-        UNDISTURBED => vd_val[i],
-        AGNOSTIC    => vd_val[i] // TODO: configuration support
-      };
-      mask[i] = 0b0
-    } else if i >= real_num_elem then {
-      // Tail elements defined by lmul < 1
-      result[i] = match tail_ag {
-        UNDISTURBED => vd_val[i],
-        AGNOSTIC    => vd_val[i] // TODO: configuration support
-      };
-      mask[i] = 0b0
-    } else if vm_val[i] == 0b0 then {
-      // Inactive body elements defined by vm
-      result[i] = match mask_ag {
-        UNDISTURBED => vd_val[i],
-        AGNOSTIC    => vd_val[i] // TODO: configuration support
-      };
-      mask[i] = 0b0
-    } else {
-      // Active body elements
-      mask[i] = 0b1;
-    }
-  };
-
-  Ok((result, mask))
-}
-$else
-val isla_init_mask = pure "isla_init_mask" : forall 'n 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n)) -> bits('n)
-val isla_vector_select = pure "isla_vector_select" : forall 'n 'm, 'n >= 0 . (bits('n), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
-val isla_masktypei_result = pure "isla_masktypei_result" : forall 'n 'm 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n), bits('m), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
-val isla_masktypev_result = pure "isla_masktypev_result" : forall 'n 'm 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n), vector('n, bits('m)), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
-val isla_vector_rev8 = pure "isla_vector_rev8" : forall 'n 'm, 'n >= 0 & 'm >= 0. vector('n, bits('m * 8)) -> vector('n, bits('m * 8))
-
 val init_masked_result_default : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), int('p), vector('n, bits('m)), bits('n)) -> result((vector('n, bits('m)), bits('n)), unit)
 function init_masked_result_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
   assert_vector_num_elem(num_elem);
@@ -408,7 +348,16 @@ function init_masked_result_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = 
   Ok((result, mask))
 }
 
+$ifdef SYMBOLIC
+val isla_init_mask = pure "isla_init_mask" : forall 'n 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n)) -> bits('n)
+val isla_vector_select = pure "isla_vector_select" : forall 'n 'm, 'n >= 0 . (bits('n), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
+val isla_masktypei_result = pure "isla_masktypei_result" : forall 'n 'm 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n), bits('m), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
+val isla_masktypev_result = pure "isla_masktypev_result" : forall 'n 'm 'p, 'n >= 0 . (int('n), nat, int, int('p), bits('n), vector('n, bits('m)), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
+val isla_vector_rev8 = pure "isla_vector_rev8" : forall 'n 'm, 'n >= 0 & 'm >= 0. vector('n, bits('m * 8)) -> vector('n, bits('m * 8))
+$endif
+
 val init_masked_result : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), int('p), vector('n, bits('m)), bits('n)) -> result((vector('n, bits('m)), bits('n)), unit)
+$ifdef SYMBOLIC
 function init_masked_result(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
   assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
@@ -423,6 +372,23 @@ function init_masked_result(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
   } else {
     init_masked_result_default(num_elem, EEW, LMUL_pow, vd_val, vm_val)
   }
+}
+$else
+function init_masked_result(num_elem, EEW, LMUL_pow, vd_val, vm_val) =
+  init_masked_result_default(num_elem, EEW, LMUL_pow, vd_val, vm_val)
+$endif
+
+val vector_select_masked : forall 'n 'm, 'n >= 0 . (bits('n), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
+$ifdef SYMBOLIC
+function vector_select_masked(mask, initial_result, new_value) =
+  isla_vector_select(mask, initial_result, new_value)
+$else
+function vector_select_masked(mask, initial_result, new_value) = {
+  var result = initial_result;
+  foreach (i from 0 to ('n - 1)) {
+    result[i] = masked_select(mask[i], new_value[i], result[i])
+  };
+  result
 }
 $endif
 
@@ -469,47 +435,6 @@ function init_masked_source(num_elem, LMUL_pow, vm_val) = {
 
 // Mask handling for carry functions that use masks as input/output
 // Only prestart and tail elements are masked in a mask value
-$ifndef SYMBOLIC
-val init_masked_result_carry : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n)) -> result((bits('n), bits('n)), unit)
-function init_masked_result_carry(num_elem, _EEW, LMUL_pow, vd_val) = {
-  assert_vector_num_elem(num_elem);
-  assert_lmul_pow(LMUL_pow);
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Err(())
-  };
-  let end_element   = get_end_element();
-  var mask : bits('n) = undefined;
-  var result : bits('n) = undefined;
-
-  // Determine the actual number of elements when lmul < 1
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
-  assert(num_elem >= real_num_elem);
-
-  foreach (i from 0 to (num_elem - 1)) {
-    if i < start_element then {
-      // Prestart elements defined by vstart
-      result[i] = vd_val[i];
-      mask[i] = 0b0
-    } else if i > end_element then {
-      // Tail elements defined by vl
-      // Mask tail is always agnostic
-      result[i] = vd_val[i]; // TODO: configuration support
-      mask[i] = 0b0
-    } else if i >= real_num_elem then {
-      // Tail elements defined by lmul < 1
-      // Mask tail is always agnostic
-      result[i] = vd_val[i]; // TODO: configuration support
-      mask[i] = 0b0
-    } else {
-      // Active body elements
-      mask[i] = 0b1
-    }
-  };
-
-  Ok(result, mask)
-}
-$else
 val init_masked_result_carry_default : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n)) -> result((bits('n), bits('n)), unit)
 function init_masked_result_carry_default(num_elem, _EEW, LMUL_pow, vd_val) = {
   assert_vector_num_elem(num_elem);
@@ -552,6 +477,7 @@ function init_masked_result_carry_default(num_elem, _EEW, LMUL_pow, vd_val) = {
 }
 
 val init_masked_result_carry : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n)) -> result((bits('n), bits('n)), unit)
+$ifdef SYMBOLIC
 function init_masked_result_carry(num_elem, EEW, LMUL_pow, vd_val) = {
   assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
@@ -567,58 +493,12 @@ function init_masked_result_carry(num_elem, EEW, LMUL_pow, vd_val) = {
     init_masked_result_carry_default(num_elem, EEW, LMUL_pow, vd_val)
   }
 }
+$else
+function init_masked_result_carry(num_elem, EEW, LMUL_pow, vd_val) =
+  init_masked_result_carry_default(num_elem, EEW, LMUL_pow, vd_val)
 $endif
 
 // Mask handling for cmp functions that use masks as output
-$ifndef SYMBOLIC
-val init_masked_result_cmp : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n), bits('n)) -> result((bits('n), bits('n)), unit)
-function init_masked_result_cmp(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
-  assert_vector_num_elem(num_elem);
-  assert_lmul_pow(LMUL_pow);
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Err(())
-  };
-  let end_element   = get_end_element();
-  let mask_ag : agtype = get_vtype_vma();
-  var mask : bits('n) = undefined;
-  var result : bits('n) = undefined;
-
-  // Determine the actual number of elements when lmul < 1
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
-  assert(num_elem >= real_num_elem);
-
-  foreach (i from 0 to (num_elem - 1)) {
-    if i < start_element then {
-      // Prestart elements defined by vstart
-      result[i] = vd_val[i];
-      mask[i] = 0b0
-    } else if i > end_element then {
-      // Tail elements defined by vl
-      // Mask tail is always agnostic
-      result[i] = vd_val[i]; // TODO: configuration support
-      mask[i] = 0b0
-    } else if i >= real_num_elem then {
-      // Tail elements defined by lmul < 1
-      // Mask tail is always agnostic
-      result[i] = vd_val[i]; // TODO: configuration support
-      mask[i] = 0b0
-    } else if vm_val[i] == 0b0 then {
-      // Inactive body elements defined by vm
-      result[i] = match mask_ag {
-        UNDISTURBED => vd_val[i],
-        AGNOSTIC    => vd_val[i] // TODO: configuration support
-      };
-      mask[i] = 0b0
-    } else {
-      // Active body elements
-      mask[i] = 0b1
-    }
-  };
-
-  Ok(result, mask)
-}
-$else
 val init_masked_result_cmp_default : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n), bits('n)) -> result((bits('n), bits('n)), unit)
 function init_masked_result_cmp_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
   assert_vector_num_elem(num_elem);
@@ -669,6 +549,7 @@ function init_masked_result_cmp_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val
 }
 
 val init_masked_result_cmp : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n), bits('n)) -> result((bits('n), bits('n)), unit)
+$ifdef SYMBOLIC
 function init_masked_result_cmp(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
   assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
@@ -684,6 +565,9 @@ function init_masked_result_cmp(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
     init_masked_result_cmp_default(num_elem, EEW, LMUL_pow, vd_val, vm_val)
   }
 }
+$else
+function init_masked_result_cmp(num_elem, EEW, LMUL_pow, vd_val, vm_val) =
+  init_masked_result_cmp_default(num_elem, EEW, LMUL_pow, vd_val, vm_val)
 $endif
 
 // For vector load/store segment instructions:
@@ -783,16 +667,6 @@ function signed_saturation(len, elem) = {
 }
 
 // The parameter m is implicit to help proof the proof assistant backends infer its value.
-$ifndef SYMBOLIC
-val vrev8 : forall 'n 'm, 'n >= 0 & 'm >= 0. (implicit('m), vector('n, bits('m * 8))) -> vector('n, bits('m * 8))
-function vrev8(_m, input) = {
-  var output : vector('n, bits('m * 8)) = input;
-  foreach (i from 0 to ('n - 1)) {
-    output[i] = rev8(input[i]);
-  };
-  output
-}
-$else
 val vrev8_default : forall 'n 'm, 'n >= 0 & 'm >= 0. (implicit('m), vector('n, bits('m * 8))) -> vector('n, bits('m * 8))
 function vrev8_default(_m, input) = {
   var output : vector('n, bits('m * 8)) = input;
@@ -803,7 +677,11 @@ function vrev8_default(_m, input) = {
 }
 
 val vrev8 : forall 'n 'm, 'n >= 0 & 'm >= 0. (implicit('m), vector('n, bits('m * 8))) -> vector('n, bits('m * 8))
+$ifdef SYMBOLIC
 function vrev8(_m, input) =
   if __isla_use_extra_ops then isla_vector_rev8(input)
   else vrev8_default(_m, input)
+$else
+function vrev8(_m, input) =
+  vrev8_default(_m, input)
 $endif

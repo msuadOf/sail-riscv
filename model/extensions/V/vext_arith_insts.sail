@@ -448,7 +448,6 @@ mapping clause encdec = MOVETYPEV (vs1, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
-$ifndef SYMBOLIC
 function clause execute MOVETYPEV(vs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
@@ -470,45 +469,12 @@ function clause execute MOVETYPEV(vs1, vd) = {
     Ok(v)   => v,
     Err(()) => return Illegal_Instruction()
   };
-  var result = initial_result;
-
-  foreach (i from 0 to (num_elem - 1)) {
-    result[i] = masked_select(mask[i], vs1_val[i], result[i])
-  };
+  let result = vector_select_masked(mask, initial_result, vs1_val);
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
-$else
-function clause execute MOVETYPEV(vs1, vd) = {
-  let SEW      = get_sew();
-  let LMUL_pow = get_lmul_pow();
-  let num_elem = get_num_elem(LMUL_pow, SEW);
-  let num_elem = assert_vector_num_elem_value(num_elem);
-
-  if illegal_vd_unmasked() |
-     not(valid_reg_group(vs1, LMUL_pow)) |
-     not(valid_reg_group(vd, LMUL_pow))
-  then return Illegal_Instruction();
-
-  let 'n = num_elem;
-  let 'm = SEW;
-
-  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
-  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
-
-  let (initial_result, mask) : (vector('n, bits('m)), bits('n)) = match init_masked_result(num_elem, SEW, LMUL_pow, vd_val, ones()) {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
-  let result = isla_vector_select(mask, initial_result, vs1_val);
-
-  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  set_vstart(zeros());
-  RETIRE_SUCCESS
-}
-$endif
 
 mapping clause assembly = MOVETYPEV(vs1, vd)
   <-> "vmv.v.v" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs1)
@@ -1391,53 +1357,6 @@ mapping clause encdec = MASKTYPEI(vs2, simm, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
-$ifndef SYMBOLIC
-function clause execute MASKTYPEI(vs2, simm, vd) = {
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
-
-  let end_element   = get_end_element();
-  let SEW           = get_sew();
-  let LMUL_pow      = get_lmul_pow();
-  let num_elem      = get_num_elem(LMUL_pow, SEW); // max(VLMAX,VLEN/SEW))
-  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (0 - LMUL_pow); // VLMAX
-
-  if illegal_vd_masked(vd) |
-     not(valid_reg_group(vs2, LMUL_pow)) |
-     not(valid_reg_group(vd, LMUL_pow))
-  then return Illegal_Instruction();
-
-  let 'n = num_elem;
-  let 'm = SEW;
-
-  let vm_val  : bits('n)             = read_vmask(num_elem, 0b0, zvreg);
-  let imm_val : bits('m)             = sign_extend(simm);
-  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
-  let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
-  var result  : vector('n, bits('m)) = vector_init(zeros());
-
-  let tail_ag : agtype = get_vtype_vta();
-  foreach (i from 0 to (num_elem - 1)) {
-    if i < start_element then {
-      result[i] = vd_val[i]
-    } else if i > end_element | i >= real_num_elem then {
-      result[i] = match tail_ag {
-        UNDISTURBED => vd_val[i],
-        AGNOSTIC    => vd_val[i] // TODO: configuration support
-      }
-    } else {
-      // the merge operates on all body elements
-      result[i] = masked_select(vm_val[i], imm_val, vs2_val[i])
-    }
-  };
-
-  write_vreg(num_elem, SEW, LMUL_pow, vd, result);
-  set_vstart(zeros());
-  RETIRE_SUCCESS
-}
-$else
 val masktypei_result : forall 'n 'm 'p, 'n >= 0 & is_sew_bitsize('m) .
   (int('n), nat, int, int('p), bits('n), bits('m), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
 function masktypei_result(num_elem, start_element, end_element, real_num_elem, vm_val, scalar_val, vs2_val, vd_val) = {
@@ -1492,7 +1411,6 @@ function clause execute MASKTYPEI(vs2, simm, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
-$endif
 
 mapping clause assembly = MASKTYPEI(vs2, simm, vd)
   <-> "vmerge.vim" ^ spc() ^ vreg_name(vd) ^ sep() ^ vreg_name(vs2) ^ sep() ^ hex_bits_signed_5(simm) ^ sep() ^ "v0"
