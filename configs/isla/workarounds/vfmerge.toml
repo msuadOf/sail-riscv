@@ -1,0 +1,19 @@
+# VFMERGE 历史执行限制；当前 run.mk 不再加载本文件。
+# 保留旧区域和基准 IR 哈希以追溯原有采样实验，不作现行完整性证据。
+# 顶层 max_forks_per_branch 曾作用于整个调用树，不仅限于下方逐 lane 区域。
+[execution_limits]
+strict = false
+ir_sha256 = "d0123541491c6ad7cb00d745e751b6a74deac442148fdf95a2488abf6b5e5409"
+max_forks_per_branch = 1
+on_limit_reached = "concretize"
+
+# 无 workaround 的 60 秒 ITRACE 完成 239 条路径后 timeout；逐 lane merge 循环
+# 1363:4-1373:5 fork 330 次，是本 clause 的明确热点。Region 使用半开区间
+# [1362:2,1374:3)，不包含 1327:1-1331:55 的循环外 encdec/SEW 分派。
+[[execution_limits.region_fork_limits]]
+max_forks_per_region = 1
+file = "extensions/V/vext_fp_insts.sail"
+start_line = 1362
+start_column = 2
+end_line = 1374
+end_column = 3
