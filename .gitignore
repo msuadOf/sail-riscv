@@ -1,19 +1,41 @@
-/generated_definitions
-
-# global things
-
+# Sail-generated definitions and build artifacts.
+/generated_definitions/
 _build/
 _sbuild/
 *.o
 *.a
-z3_problems
 
-# Typical CMake build directory.
-/build
-# CMake build directories used by CLion.
-/cmake-build-*
-# z3 cache
+# Solver scratch files and memoization caches.
+z3_problems
 sail_smt_cache
 
-/build-symbolic-*/
-/.*/
+# CMake build directories (including symbolic builds and CLion).
+/build/
+/build-*/
+/cmake-build-*/
+CMakeUserPresets.json
+compile_commands.json
+
+# Rust test harness build outputs. Keep Cargo.lock for reproducibility.
+target/
+
+# Python bytecode, test caches, and virtual environments.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local worktrees and tool caches; do not blanket-ignore hidden directories.
+/.worktrees/
+/.worktree/
+/.cache/
+
+# Editor temporary files and OS metadata.
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

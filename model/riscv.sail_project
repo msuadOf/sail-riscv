@@ -4,6 +4,7 @@ prelude {
   files
     prelude/prelude.sail,
     prelude/errors.sail,
+    prelude/ieee_fp_primops.sail,
 }
 
 core {
