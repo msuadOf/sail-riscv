@@ -1466,17 +1466,77 @@ union clause instruction = VMVRTYPE : (vregidx, {1, 2, 4, 8}, vregidx)
 //
 // The value of NREG must be 1, 2, 4, or 8, and values of simm[4:0] other
 // than 0, 1, 3, and 7 are reserved."
+$ifdef SYMBOLIC
+val encdec_nreg : bits(5) <-> {1, 2, 4, 8}
+
+function encdec_nreg_forwards(nreg_bits) = match nreg_bits {
+  0b00000 => 1,
+  0b00001 => 2,
+  0b00011 => 4,
+  0b00111 => 8,
+}
+
+function encdec_nreg_forwards_matches(nreg_bits) =
+  strict_or_bool(
+    strict_or_bool(eq_anything(nreg_bits, 0b00000), eq_anything(nreg_bits, 0b00001)),
+    strict_or_bool(eq_anything(nreg_bits, 0b00011), eq_anything(nreg_bits, 0b00111))
+  )
+
+function encdec_nreg_backwards(nreg) = match nreg {
+  1 => 0b00000,
+  2 => 0b00001,
+  4 => 0b00011,
+  8 => 0b00111,
+}
+
+function encdec_nreg_backwards_matches(_) = true
+$else
 mapping encdec_nreg : bits(5) <-> {1, 2, 4, 8} = {
   0b00000 <-> 1,
   0b00001 <-> 2,
   0b00011 <-> 4,
   0b00111 <-> 8,
 }
+$endif
 
+$ifdef SYMBOLIC
+val vmvr_layout : (vregidx, {1, 2, 4, 8}, vregidx) <-> bits(32)
+
+function vmvr_layout_forwards((vs2, nreg, vd)) =
+  0b100111 @ 0b1 @ encdec_vreg_forwards(vs2) @ encdec_nreg_backwards(nreg) @
+  0b011 @ encdec_vreg_forwards(vd) @ 0b1010111
+
+function vmvr_layout_forwards_matches(_) = true
+
+function vmvr_layout_backwards(word) = match
+  (word[31..26], word[25..25], word[14..12], word[6..0]) {
+  (0b100111, 0b1, 0b011, 0b1010111) =>
+    (encdec_vreg_backwards(word[24..20]),
+     encdec_nreg_forwards(word[19..15]),
+     encdec_vreg_backwards(word[11..7])),
+}
+
+function vmvr_layout_backwards_matches(word) =
+  strict_and_bool(
+    strict_and_bool(eq_anything(word[31..26], 0b100111), eq_anything(word[25..25], 0b1)),
+    strict_and_bool(
+      strict_and_bool(eq_anything(word[14..12], 0b011), eq_anything(word[6..0], 0b1010111)),
+      encdec_nreg_forwards_matches(word[19..15])
+    )
+  )
+$endif
+
+$ifdef SYMBOLIC
+mapping clause encdec = VMVRTYPE(vs2, nreg, vd)
+  <-> vmvr_layout((vs2, nreg, vd))
+  when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
+     | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
+$else
 mapping clause encdec = VMVRTYPE(vs2, nreg, vd)
   <-> 0b100111 @ 0b1 @ encdec_vreg(vs2) @ encdec_nreg(nreg) @ 0b011 @ encdec_vreg(vd) @ 0b1010111
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
+$endif
 
 function clause execute VMVRTYPE(vs2, nreg, vd) = {
   let start_element : nat = match get_start_element() {
@@ -1945,6 +2005,41 @@ mapping clause assembly = WMVVTYPE(funct6, vm, vs2, vs1, vd)
 // ****************** Vector Integer Extension (SEW/2 source) *******************
 union clause instruction = VEXTTYPE : (vextfunct6, bits(1), vregidx, vregidx)
 
+$ifdef SYMBOLIC
+val vext_vs1 : vextfunct6 <-> bits(5)
+
+function vext_vs1_forwards(funct6) = match funct6 {
+  VEXT2_ZVF2  => 0b00110,
+  VEXT2_SVF2  => 0b00111,
+  VEXT4_ZVF4  => 0b00100,
+  VEXT4_SVF4  => 0b00101,
+  VEXT8_ZVF8  => 0b00010,
+  VEXT8_SVF8  => 0b00011,
+}
+
+function vext_vs1_forwards_matches(_) = true
+
+function vext_vs1_backwards(vs1_bits) = match vs1_bits {
+  0b00110 => VEXT2_ZVF2,
+  0b00111 => VEXT2_SVF2,
+  0b00100 => VEXT4_ZVF4,
+  0b00101 => VEXT4_SVF4,
+  0b00010 => VEXT8_ZVF8,
+  0b00011 => VEXT8_SVF8,
+}
+
+function vext_vs1_backwards_matches(vs1_bits) =
+  strict_or_bool(
+    strict_or_bool(eq_anything(vs1_bits, 0b00110), eq_anything(vs1_bits, 0b00111)),
+    strict_or_bool(
+      eq_anything(vs1_bits, 0b00100),
+      strict_or_bool(
+        eq_anything(vs1_bits, 0b00101),
+        strict_or_bool(eq_anything(vs1_bits, 0b00010), eq_anything(vs1_bits, 0b00011))
+      )
+    )
+  )
+$else
 mapping vext_vs1 : vextfunct6 <-> bits(5) = {
   VEXT2_ZVF2  <-> 0b00110,
   VEXT2_SVF2  <-> 0b00111,
@@ -1953,11 +2048,43 @@ mapping vext_vs1 : vextfunct6 <-> bits(5) = {
   VEXT8_ZVF8  <-> 0b00010,
   VEXT8_SVF8  <-> 0b00011,
 }
+$endif
 
+$ifdef SYMBOLIC
+val vext_layout : (vextfunct6, bits(1), vregidx, vregidx) <-> bits(32)
+
+function vext_layout_forwards((funct6, vm, vs2, vd)) =
+  0b010010 @ vm @ encdec_vreg_forwards(vs2) @ vext_vs1_forwards(funct6) @
+  0b010 @ encdec_vreg_forwards(vd) @ 0b1010111
+
+function vext_layout_forwards_matches(_) = true
+
+function vext_layout_backwards(word) = match
+  (word[31..26], word[14..12], word[6..0]) {
+  (0b010010, 0b010, 0b1010111) =>
+    (vext_vs1_backwards(word[19..15]), word[25..25],
+     encdec_vreg_backwards(word[24..20]), encdec_vreg_backwards(word[11..7])),
+}
+
+function vext_layout_backwards_matches(word) =
+  strict_and_bool(
+    strict_and_bool(eq_anything(word[31..26], 0b010010), eq_anything(word[14..12], 0b010)),
+    strict_and_bool(eq_anything(word[6..0], 0b1010111),
+                    vext_vs1_backwards_matches(word[19..15]))
+  )
+$endif
+
+$ifdef SYMBOLIC
+mapping clause encdec = VEXTTYPE(funct6, vm, vs2, vd)
+  <-> vext_layout((funct6, vm, vs2, vd))
+  when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
+     | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
+$else
 mapping clause encdec = VEXTTYPE(funct6, vm, vs2, vd)
   <-> 0b010010 @ vm @ encdec_vreg(vs2) @ vext_vs1(funct6) @ 0b010 @ encdec_vreg(vd) @ 0b1010111
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
+$endif
 
 function clause execute VEXTTYPE(funct6, vm, vs2, vd) = {
   let SEW      = get_sew();
