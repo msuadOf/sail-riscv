@@ -201,38 +201,14 @@ function fp_sub(rm_3b, op1, op2) = {
 
 val fp_min : forall 'm, 'm in {16, 32, 64}. (bits('m), bits('m)) -> bits('m)
 function fp_min(op1, op2) = {
-  let (fflags, op1_lt_op2) : (bits_fflags, bool) = match 'm {
-    16  => riscv_f16Lt_quiet(op1, op2),
-    32  => riscv_f32Lt_quiet(op1, op2),
-    64  => riscv_f64Lt_quiet(op1, op2)
-  };
-
-  let result_val = if (f_is_NaN(op1) & f_is_NaN(op2)) then canonical_NaN('m)
-                else if f_is_NaN(op1) then op2
-                else if f_is_NaN(op2) then op1
-                else if (f_is_neg_zero(op1) & f_is_pos_zero(op2)) then op1
-                else if (f_is_neg_zero(op2) & f_is_pos_zero(op1)) then op2
-                else if op1_lt_op2 then op1
-                else op2;
+  let (fflags, result_val) = fp_min_pure(op1, op2);
   accrue_fflags(fflags);
   result_val
 }
 
 val fp_max : forall 'm, 'm in {16, 32, 64}. (bits('m), bits('m)) -> bits('m)
 function fp_max(op1, op2) = {
-  let (fflags, op1_lt_op2) : (bits_fflags, bool) = match 'm {
-    16  => riscv_f16Lt_quiet(op1, op2),
-    32  => riscv_f32Lt_quiet(op1, op2),
-    64  => riscv_f64Lt_quiet(op1, op2)
-  };
-
-  let result_val = if (f_is_NaN(op1) & f_is_NaN(op2)) then canonical_NaN('m)
-                else if f_is_NaN(op1) then op2
-                else if f_is_NaN(op2) then op1
-                else if (f_is_neg_zero(op1) & f_is_pos_zero(op2)) then op2
-                else if (f_is_neg_zero(op2) & f_is_pos_zero(op1)) then op1
-                else if op1_lt_op2 then op2
-                else op1;
+  let (fflags, result_val) = fp_max_pure(op1, op2);
   accrue_fflags(fflags);
   result_val
 }

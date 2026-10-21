@@ -1,0 +1,9 @@
+[package]
+name = "isla-ieee-exception-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+isla-lib = { path = "../../../isla/isla-lib" }
+serde_json = "1.0"

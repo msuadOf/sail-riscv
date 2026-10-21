@@ -34,8 +34,13 @@ add_library(riscv_model
     riscv_platform_if.h
     riscv_model_impl.cpp
     riscv_model_impl.h
-    riscv_softfloat.cpp
-    riscv_softfloat.h
+    sail_softfloat.cpp
+    sail_softfloat.h
+    sail_softfloat_types.h
+    sail_softfloat_wide.cpp
+    sail_softfloat_wide.h
+    sail_softfloat_extra.cpp
+    sail_softfloat_extra.h
     config_utils.cpp
     config_utils.h
     file_utils.cpp
@@ -57,6 +62,11 @@ target_include_directories(riscv_model
         "${CMAKE_BINARY_DIR}"
         # So `config_utils.cpp` can find `config_schema.h`
         "${CMAKE_CURRENT_BINARY_DIR}"
+)
+
+target_compile_definitions(riscv_model PUBLIC
+    SAIL_SOFTFLOAT_ENABLE_WIDE=1
+    SAIL_SOFTFLOAT_ENABLE_EXTRA=1
 )
 
 target_link_libraries(riscv_model
@@ -135,3 +145,15 @@ endif()
 install(TARGETS sail_riscv_sim
     RUNTIME DESTINATION "bin"
 )
+
+# Legacy SoftFloat flags wrappers are a separate, explicitly requested oracle.
+add_library(riscv_softfloat_oracle STATIC EXCLUDE_FROM_ALL
+    riscv_softfloat.cpp
+    riscv_softfloat.h
+)
+target_include_directories(riscv_softfloat_oracle PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_BINARY_DIR}"
+)
+target_link_libraries(riscv_softfloat_oracle PRIVATE softfloat sail_runtime)
+add_dependencies(riscv_softfloat_oracle generated_sail_riscv_model)

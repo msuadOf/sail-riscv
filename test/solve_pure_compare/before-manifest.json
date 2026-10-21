@@ -1,0 +1,6 @@
+{
+  "model/core/ieee_fp_exceptions.sail": "d80c4aabcc40f6c0de5aad439aab24a012de51a98ec1a3669ff4a52a781c9bf6",
+  "model/extensions/FD/softfloat_symbolic_f16.sail": "31238f0ac781a0acfda52534c3b4c8ddcb70f70eb5571c0b6205f7427151daa2",
+  "model/extensions/FD/softfloat_symbolic_f32.sail": "64bf0f573d8eb94981ced5fc264e86ec3229e880824e00449decd54f289a973d",
+  "model/extensions/FD/softfloat_symbolic_f64.sail": "3177e2e17110253efe4817bc1e92aab5bb80cd9317ac17c3c482c30af52eb0c7"
+}

@@ -1,0 +1,22 @@
+prelude {
+  files
+    ../../model/prelude/prelude.sail,
+    ../../model/prelude/ieee_fp_primops.sail,
+}
+
+core {
+  requires prelude
+  files
+    ../../model/core/softfloat_interface.sail,
+    ../../model/core/ieee_fp_exceptions.sail,
+}
+
+fp_test {
+  requires prelude, core
+  files
+    ../../model/extensions/FD/softfloat_symbolic.sail,
+    ../../model/extensions/FD/softfloat_symbolic_f16.sail,
+    ../../model/extensions/FD/softfloat_symbolic_f32.sail,
+    ../../model/extensions/FD/softfloat_symbolic_f64.sail,
+    stage_b.sail,
+}

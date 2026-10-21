@@ -42,6 +42,7 @@ core {
     core/addr_checks.sail,
     core/misa_ext.sail,
     core/softfloat_interface.sail,
+    core/ieee_fp_exceptions.sail,
 }
 
 exceptions {
@@ -188,6 +189,11 @@ extensions {
         extensions/FD/freg_type.sail,
         extensions/FD/fdext_regs.sail,
         extensions/FD/fdext_control.sail,
+        extensions/FD/softfloat_symbolic.sail,
+        extensions/FD/softfloat_symbolic_f16.sail,
+        extensions/FD/softfloat_symbolic_f32.sail,
+        extensions/FD/softfloat_symbolic_f64.sail,
+        extensions/FD/fp_minmax.sail,
     }
 
     FD_instructions {

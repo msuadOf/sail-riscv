@@ -1,0 +1,291 @@
+--- a/model/core/ieee_fp_exceptions.sail
++++ b/model/core/ieee_fp_exceptions.sail
+@@ -16,36 +16,35 @@
+ }
+ 
+ // Decompose through Sail's shared float_bits type. Keep Boolean operations
+-// strict so symbolic input bits do not fork on classification. Generic
+-// equality builds a Boolean term without eager bitvector solver queries.
++// strict so symbolic input bits do not fork on classification.
+ val ieee_is_nan : forall 'n, is_fp_bits('n). bits('n) -> bool
+ function ieee_is_nan(raw) = {
+   let fp : float_bits('n) = float_decompose(raw);
+-  strict_and_bool(eq_anything(fp.exp, sail_ones(length(fp.exp))), not_bool(eq_anything(fp.mantissa, sail_zeros(length(fp.mantissa)))))
++  strict_and_bool(is_all_ones(fp.exp), not_bool(is_all_zeros(fp.mantissa)))
+ }
+ 
+ val ieee_is_snan : forall 'n, is_fp_bits('n). bits('n) -> bool
+ function ieee_is_snan(raw) = {
+   let fp : float_bits('n) = float_decompose(raw);
+-  strict_and_bool(ieee_is_nan(raw), eq_anything(fp.mantissa[length(fp.mantissa) - 1], bitzero))
++  strict_and_bool(ieee_is_nan(raw), is_highest_zero(fp.mantissa))
+ }
+ 
+ val ieee_is_inf : forall 'n, is_fp_bits('n). bits('n) -> bool
+ function ieee_is_inf(raw) = {
+   let fp : float_bits('n) = float_decompose(raw);
+-  strict_and_bool(eq_anything(fp.exp, sail_ones(length(fp.exp))), eq_anything(fp.mantissa, sail_zeros(length(fp.mantissa))))
++  strict_and_bool(is_all_ones(fp.exp), is_all_zeros(fp.mantissa))
+ }
+ 
+ val ieee_is_zero : forall 'n, is_fp_bits('n). bits('n) -> bool
+ function ieee_is_zero(raw) = {
+   let fp : float_bits('n) = float_decompose(raw);
+-  strict_and_bool(eq_anything(fp.exp, sail_zeros(length(fp.exp))), eq_anything(fp.mantissa, sail_zeros(length(fp.mantissa))))
++  strict_and_bool(is_all_zeros(fp.exp), is_all_zeros(fp.mantissa))
+ }
+ 
+ val ieee_is_finite : forall 'n, is_fp_bits('n). bits('n) -> bool
+ function ieee_is_finite(raw) = {
+   let fp : float_bits('n) = float_decompose(raw);
+-  not_bool(eq_anything(fp.exp, sail_ones(length(fp.exp))))
++  not_bool(is_all_ones(fp.exp))
+ }
+ 
+ // Shared Sail flag order is NV bit 0, DZ bit 1, OF bit 2, UF bit 3, NX bit 4.
+@@ -133,7 +132,7 @@
+   let invalid_nan = strict_or_bool(ieee_is_snan(a), ieee_is_snan(b));
+   let invalid_inf = strict_and_bool(
+     strict_and_bool(ieee_is_inf(a), ieee_is_inf(b)),
+-    not_bool(eq_anything(a[31], b[31]))
++    a[31] != b[31]
+   );
+   let invalid = strict_or_bool(invalid_nan, invalid_inf);
+   let x = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(a));
+@@ -155,7 +154,7 @@
+   let invalid_nan = strict_or_bool(ieee_is_snan(a), ieee_is_snan(b));
+   let invalid_inf = strict_and_bool(
+     strict_and_bool(ieee_is_inf(a), ieee_is_inf(b)),
+-    eq_anything(a[31], b[31])
++    a[31] == b[31]
+   );
+   let invalid = strict_or_bool(invalid_nan, invalid_inf);
+   let x = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(a));
+@@ -224,7 +223,7 @@
+   let invalid_nan = strict_or_bool(ieee_is_snan(a), ieee_is_snan(b));
+   let invalid_inf = strict_and_bool(
+     strict_and_bool(ieee_is_inf(a), ieee_is_inf(b)),
+-    not_bool(eq_anything(a[15], b[15]))
++    a[15] != b[15]
+   );
+   let invalid = strict_or_bool(invalid_nan, invalid_inf);
+   let x = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(a));
+@@ -246,7 +245,7 @@
+   let invalid_nan = strict_or_bool(ieee_is_snan(a), ieee_is_snan(b));
+   let invalid_inf = strict_and_bool(
+     strict_and_bool(ieee_is_inf(a), ieee_is_inf(b)),
+-    eq_anything(a[15], b[15])
++    a[15] == b[15]
+   );
+   let invalid = strict_or_bool(invalid_nan, invalid_inf);
+   let x = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(a));
+@@ -316,7 +315,7 @@
+   let invalid_nan = strict_or_bool(ieee_is_snan(a), ieee_is_snan(b));
+   let invalid_inf = strict_and_bool(
+     strict_and_bool(ieee_is_inf(a), ieee_is_inf(b)),
+-    not_bool(eq_anything(a[63], b[63]))
++    a[63] != b[63]
+   );
+   let invalid = strict_or_bool(invalid_nan, invalid_inf);
+   let x = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
+@@ -338,7 +337,7 @@
+   let invalid_nan = strict_or_bool(ieee_is_snan(a), ieee_is_snan(b));
+   let invalid_inf = strict_and_bool(
+     strict_and_bool(ieee_is_inf(a), ieee_is_inf(b)),
+-    eq_anything(a[63], b[63])
++    a[63] == b[63]
+   );
+   let invalid = strict_or_bool(invalid_nan, invalid_inf);
+   let x = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
+@@ -401,7 +400,7 @@
+ }
+ 
+ function ieee_sqrt16_exceptions(rm : float_rounding_mode, a : bits(16), result : float16) -> ieee_fp_exceptions = {
+-  let negative_nonzero = strict_and_bool(eq_anything(a[15], 0b1), not_bool(ieee_is_zero(a)));
++  let negative_nonzero = strict_and_bool(a[15] == 0b1, not_bool(ieee_is_zero(a)));
+   let invalid_negative = strict_and_bool(not_bool(ieee_is_nan(a)), negative_nonzero);
+   let invalid = strict_or_bool(ieee_is_snan(a), invalid_negative);
+   let x = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(a));
+@@ -428,14 +427,10 @@
+     strict_and_bool(ieee_is_inf(a), strict_and_bool(not_bool(ieee_is_nan(b)), not_bool(ieee_is_zero(b)))),
+     strict_and_bool(ieee_is_inf(b), strict_and_bool(not_bool(ieee_is_nan(a)), not_bool(ieee_is_zero(a))))
+   );
+-  let product_negative = not_bool(eq_anything(a[15], b[15]));
+-  let c_negative : bool = eq_anything(c[15], 0b1);
++  let product_negative = a[15] != b[15];
+   let invalid_inf_cancel = strict_and_bool(
+     strict_and_bool(valid_inf_product, ieee_is_inf(c)),
+-    strict_or_bool(
+-      strict_and_bool(product_negative, not_bool(c_negative)),
+-      strict_and_bool(not_bool(product_negative), c_negative)
+-    )
++    product_negative != (c[15] == 0b1)
+   );
+   let invalid = strict_or_bool(invalid_nan, strict_or_bool(invalid_zero_inf, invalid_inf_cancel));
+   let x = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(a));
+@@ -500,7 +495,7 @@
+ }
+ 
+ function ieee_sqrt32_exceptions(rm : float_rounding_mode, a : bits(32), result : float32) -> ieee_fp_exceptions = {
+-  let negative_nonzero = strict_and_bool(eq_anything(a[31], 0b1), not_bool(ieee_is_zero(a)));
++  let negative_nonzero = strict_and_bool(a[31] == 0b1, not_bool(ieee_is_zero(a)));
+   let invalid_negative = strict_and_bool(not_bool(ieee_is_nan(a)), negative_nonzero);
+   let invalid = strict_or_bool(ieee_is_snan(a), invalid_negative);
+   let x = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(a));
+@@ -527,14 +522,10 @@
+     strict_and_bool(ieee_is_inf(a), strict_and_bool(not_bool(ieee_is_nan(b)), not_bool(ieee_is_zero(b)))),
+     strict_and_bool(ieee_is_inf(b), strict_and_bool(not_bool(ieee_is_nan(a)), not_bool(ieee_is_zero(a))))
+   );
+-  let product_negative = not_bool(eq_anything(a[31], b[31]));
+-  let c_negative : bool = eq_anything(c[31], 0b1);
++  let product_negative = a[31] != b[31];
+   let invalid_inf_cancel = strict_and_bool(
+     strict_and_bool(valid_inf_product, ieee_is_inf(c)),
+-    strict_or_bool(
+-      strict_and_bool(product_negative, not_bool(c_negative)),
+-      strict_and_bool(not_bool(product_negative), c_negative)
+-    )
++    product_negative != (c[31] == 0b1)
+   );
+   let invalid = strict_or_bool(invalid_nan, strict_or_bool(invalid_zero_inf, invalid_inf_cancel));
+   let x = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(a));
+@@ -599,7 +590,7 @@
+ }
+ 
+ function ieee_sqrt64_exceptions(rm : float_rounding_mode, a : bits(64), result : float64) -> ieee_fp_exceptions = {
+-  let negative_nonzero = strict_and_bool(eq_anything(a[63], 0b1), not_bool(ieee_is_zero(a)));
++  let negative_nonzero = strict_and_bool(a[63] == 0b1, not_bool(ieee_is_zero(a)));
+   let invalid_negative = strict_and_bool(not_bool(ieee_is_nan(a)), negative_nonzero);
+   let invalid = strict_or_bool(ieee_is_snan(a), invalid_negative);
+   let x = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
+@@ -626,14 +617,10 @@
+     strict_and_bool(ieee_is_inf(a), strict_and_bool(not_bool(ieee_is_nan(b)), not_bool(ieee_is_zero(b)))),
+     strict_and_bool(ieee_is_inf(b), strict_and_bool(not_bool(ieee_is_nan(a)), not_bool(ieee_is_zero(a))))
+   );
+-  let product_negative = not_bool(eq_anything(a[63], b[63]));
+-  let c_negative : bool = eq_anything(c[63], 0b1);
++  let product_negative = a[63] != b[63];
+   let invalid_inf_cancel = strict_and_bool(
+     strict_and_bool(valid_inf_product, ieee_is_inf(c)),
+-    strict_or_bool(
+-      strict_and_bool(product_negative, not_bool(c_negative)),
+-      strict_and_bool(not_bool(product_negative), c_negative)
+-    )
++    product_negative != (c[63] == 0b1)
+   );
+   let invalid = strict_or_bool(invalid_nan, strict_or_bool(invalid_zero_inf, invalid_inf_cancel));
+   let x = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
+--- a/model/extensions/FD/softfloat_symbolic_f16.sail
++++ b/model/extensions/FD/softfloat_symbolic_f16.sail
+@@ -54,7 +54,7 @@
+   let exceptions = ieee_fp16_to_int_exceptions(a, rounded, false, false);
+   let candidate = fp16_to_signed32(round_toward_zero(), rounded);
+   let invalid = ite(ieee_is_nan(a), 0x7fffffff,
+-    ite(eq_anything(a[15], 0b1), 0x80000000, 0x7fffffff));
++    ite(a[15] == 0b1, 0x80000000, 0x7fffffff));
+   (riscv_pack_ieee_flags(exceptions), ite(ieee_has_invalid(exceptions), invalid, candidate))
+ }
+ 
+@@ -64,7 +64,7 @@
+   let exceptions = ieee_fp16_to_int_exceptions(a, rounded, true, false);
+   let candidate = fp16_to_unsigned32(round_toward_zero(), rounded);
+   let invalid = ite(ieee_is_nan(a), 0xffffffff,
+-    ite(eq_anything(a[15], 0b1), 0x00000000, 0xffffffff));
++    ite(a[15] == 0b1, 0x00000000, 0xffffffff));
+   (riscv_pack_ieee_flags(exceptions), ite(ieee_has_invalid(exceptions), invalid, candidate))
+ }
+ 
+@@ -74,7 +74,7 @@
+   let exceptions = ieee_fp16_to_int_exceptions(a, rounded, false, true);
+   let candidate = fp16_to_signed64(round_toward_zero(), rounded);
+   let invalid = ite(ieee_is_nan(a), 0x7fffffffffffffff,
+-    ite(eq_anything(a[15], 0b1), 0x8000000000000000, 0x7fffffffffffffff));
++    ite(a[15] == 0b1, 0x8000000000000000, 0x7fffffffffffffff));
+   (riscv_pack_ieee_flags(exceptions), ite(ieee_has_invalid(exceptions), invalid, candidate))
+ }
+ 
+@@ -84,7 +84,7 @@
+   let exceptions = ieee_fp16_to_int_exceptions(a, rounded, true, true);
+   let candidate = fp16_to_unsigned64(round_toward_zero(), rounded);
+   let invalid = ite(ieee_is_nan(a), 0xffffffffffffffff,
+-    ite(eq_anything(a[15], 0b1), 0x0000000000000000, 0xffffffffffffffff));
++    ite(a[15] == 0b1, 0x0000000000000000, 0xffffffffffffffff));
+   (riscv_pack_ieee_flags(exceptions), ite(ieee_has_invalid(exceptions), invalid, candidate))
+ }
+ 
+--- a/model/extensions/FD/softfloat_symbolic_f32.sail
++++ b/model/extensions/FD/softfloat_symbolic_f32.sail
+@@ -101,7 +101,7 @@
+   let exceptions = ieee_fp32_to_int_exceptions(a, rounded, false, false);
+   let candidate = fp32_to_signed32(round_toward_zero(), rounded);
+   let invalid_result = ite(ieee_is_nan(a), 0x7fffffff,
+-    ite(eq_anything(a[31], 0b1), 0x80000000, 0x7fffffff));
++    ite(a[31] == 0b1, 0x80000000, 0x7fffffff));
+   (riscv_pack_ieee_flags(exceptions), ite(ieee_has_invalid(exceptions), invalid_result, candidate))
+ }
+ 
+@@ -111,7 +111,7 @@
+   let exceptions = ieee_fp32_to_int_exceptions(a, rounded, true, false);
+   let candidate = fp32_to_unsigned32(round_toward_zero(), rounded);
+   let invalid_result = ite(ieee_is_nan(a), 0xffffffff,
+-    ite(eq_anything(a[31], 0b1), 0x00000000, 0xffffffff));
++    ite(a[31] == 0b1, 0x00000000, 0xffffffff));
+   (riscv_pack_ieee_flags(exceptions), ite(ieee_has_invalid(exceptions), invalid_result, candidate))
+ }
+ 
+@@ -121,7 +121,7 @@
+   let exceptions = ieee_fp32_to_int_exceptions(a, rounded, false, true);
+   let candidate = fp32_to_signed64(round_toward_zero(), rounded);
+   let invalid_result = ite(ieee_is_nan(a), 0x7fffffffffffffff,
+-    ite(eq_anything(a[31], 0b1), 0x8000000000000000, 0x7fffffffffffffff));
++    ite(a[31] == 0b1, 0x8000000000000000, 0x7fffffffffffffff));
+   (riscv_pack_ieee_flags(exceptions), ite(ieee_has_invalid(exceptions), invalid_result, candidate))
+ }
+ 
+@@ -131,7 +131,7 @@
+   let exceptions = ieee_fp32_to_int_exceptions(a, rounded, true, true);
+   let candidate = fp32_to_unsigned64(round_toward_zero(), rounded);
+   let invalid_result = ite(ieee_is_nan(a), 0xffffffffffffffff,
+-    ite(eq_anything(a[31], 0b1), 0x0000000000000000, 0xffffffffffffffff));
++    ite(a[31] == 0b1, 0x0000000000000000, 0xffffffffffffffff));
+   (riscv_pack_ieee_flags(exceptions), ite(ieee_has_invalid(exceptions), invalid_result, candidate))
+ }
+ 
+--- a/model/extensions/FD/softfloat_symbolic_f64.sail
++++ b/model/extensions/FD/softfloat_symbolic_f64.sail
+@@ -88,7 +88,7 @@
+   let rounded = fp64_round_to_integral(mode, fp64_from_ieee(a));
+   let flags = ieee_fp64_to_int_exceptions(a, rounded, false, false);
+   let candidate = fp64_to_signed32(round_toward_zero(), rounded);
+-  let positive = strict_or_bool(ieee_is_nan(a), eq_anything(a[63], 0b0));
++  let positive = strict_or_bool(ieee_is_nan(a), a[63] == 0b0);
+   let invalid = ite(positive, 0x7fffffff, 0x80000000);
+   (riscv_pack_ieee_flags(flags), ite(ieee_has_invalid(flags), invalid, candidate))
+ }
+@@ -98,7 +98,7 @@
+   let rounded = fp64_round_to_integral(mode, fp64_from_ieee(a));
+   let flags = ieee_fp64_to_int_exceptions(a, rounded, true, false);
+   let candidate = fp64_to_unsigned32(round_toward_zero(), rounded);
+-  let positive = strict_or_bool(ieee_is_nan(a), eq_anything(a[63], 0b0));
++  let positive = strict_or_bool(ieee_is_nan(a), a[63] == 0b0);
+   let invalid = ite(positive, 0xffffffff, 0x00000000);
+   (riscv_pack_ieee_flags(flags), ite(ieee_has_invalid(flags), invalid, candidate))
+ }
+@@ -108,7 +108,7 @@
+   let rounded = fp64_round_to_integral(mode, fp64_from_ieee(a));
+   let flags = ieee_fp64_to_int_exceptions(a, rounded, false, true);
+   let candidate = fp64_to_signed64(round_toward_zero(), rounded);
+-  let positive = strict_or_bool(ieee_is_nan(a), eq_anything(a[63], 0b0));
++  let positive = strict_or_bool(ieee_is_nan(a), a[63] == 0b0);
+   let invalid = ite(positive, 0x7fffffffffffffff, 0x8000000000000000);
+   (riscv_pack_ieee_flags(flags), ite(ieee_has_invalid(flags), invalid, candidate))
+ }
+@@ -118,7 +118,7 @@
+   let rounded = fp64_round_to_integral(mode, fp64_from_ieee(a));
+   let flags = ieee_fp64_to_int_exceptions(a, rounded, true, true);
+   let candidate = fp64_to_unsigned64(round_toward_zero(), rounded);
+-  let positive = strict_or_bool(ieee_is_nan(a), eq_anything(a[63], 0b0));
++  let positive = strict_or_bool(ieee_is_nan(a), a[63] == 0b0);
+   let invalid = ite(positive, 0xffffffffffffffff, 0x0000000000000000);
+   (riscv_pack_ieee_flags(flags), ite(ieee_has_invalid(flags), invalid, candidate))
+ }

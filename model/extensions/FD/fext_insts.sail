@@ -787,17 +787,7 @@ function clause execute F_BIN_TYPE_F_S(rs2, rs1, rd, FMIN_S) = {
   let rs1_val_S = F_or_X_S(rs1);
   let rs2_val_S = F_or_X_S(rs2);
 
-  let is_quiet  = true;
-  let (rs1_lt_rs2, fflags) = fle_S (rs1_val_S, rs2_val_S, is_quiet);
-
-  let rd_val_S  = if      (f_is_NaN_S(rs1_val_S) & f_is_NaN_S(rs2_val_S))           then canonical_NaN_S()
-                  else if f_is_NaN_S(rs1_val_S)                                     then rs2_val_S
-                  else if f_is_NaN_S(rs2_val_S)                                     then rs1_val_S
-                  else if (f_is_neg_zero_S(rs1_val_S) & f_is_pos_zero_S(rs2_val_S)) then rs1_val_S
-                  else if (f_is_neg_zero_S(rs2_val_S) & f_is_pos_zero_S(rs1_val_S)) then rs2_val_S
-                  else if rs1_lt_rs2                                                then rs1_val_S
-                  else /* (not rs1_lt_rs2) */                                            rs2_val_S;
-
+  let (fflags, rd_val_S) = fp_min_pure(rs1_val_S, rs2_val_S);
   accrue_fflags(fflags);
   F_or_X_S(rd) = rd_val_S;
   RETIRE_SUCCESS
@@ -807,17 +797,7 @@ function clause execute F_BIN_TYPE_F_S(rs2, rs1, rd, FMAX_S) = {
   let rs1_val_S = F_or_X_S(rs1);
   let rs2_val_S = F_or_X_S(rs2);
 
-  let is_quiet  = true;
-  let (rs2_lt_rs1, fflags) = fle_S (rs2_val_S, rs1_val_S, is_quiet);
-
-  let rd_val_S  = if      (f_is_NaN_S(rs1_val_S) & f_is_NaN_S(rs2_val_S))           then canonical_NaN_S()
-                  else if f_is_NaN_S(rs1_val_S)                                     then rs2_val_S
-                  else if f_is_NaN_S(rs2_val_S)                                     then rs1_val_S
-                  else if (f_is_neg_zero_S(rs1_val_S) & f_is_pos_zero_S(rs2_val_S)) then rs2_val_S
-                  else if (f_is_neg_zero_S(rs2_val_S) & f_is_pos_zero_S(rs1_val_S)) then rs1_val_S
-                  else if rs2_lt_rs1                                                then rs1_val_S
-                  else /* (not rs2_lt_rs1) */                                            rs2_val_S;
-
+  let (fflags, rd_val_S) = fp_max_pure(rs1_val_S, rs2_val_S);
   accrue_fflags(fflags);
   F_or_X_S(rd) = rd_val_S;
   RETIRE_SUCCESS

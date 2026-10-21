@@ -1,0 +1,8 @@
+[package]
+name = "isla-type-reuse-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+isla-lib = { path = "../../../../isla/isla-lib" }

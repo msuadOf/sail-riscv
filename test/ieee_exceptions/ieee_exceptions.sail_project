@@ -1,0 +1,16 @@
+prelude {
+  files
+    ../../model/prelude/prelude.sail,
+    ../../model/prelude/ieee_fp_primops.sail,
+}
+
+core {
+  requires prelude
+  files
+    ../../model/core/ieee_fp_exceptions.sail,
+}
+
+exception_test {
+  requires prelude, core
+  files ieee_exceptions.sail
+}
