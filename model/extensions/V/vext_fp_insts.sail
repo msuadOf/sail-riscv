@@ -203,7 +203,7 @@ function clause execute FWVVTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW_widen      = SEW * 2;
   let LMUL_pow_widen = LMUL_pow + 1;
 
-  if  illegal_fp_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
+  if  illegal_fp_standard_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
       not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) |
       not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen))
   then return Illegal_Instruction();
@@ -275,7 +275,7 @@ function clause execute FWVVMATYPE(funct6, vm, vs1, vs2, vd) = {
   let SEW_widen      = SEW * 2;
   let LMUL_pow_widen = LMUL_pow + 1;
 
-  if  illegal_fp_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
+  if  illegal_fp_standard_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
       not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) |
       not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen))
   then return Illegal_Instruction();
@@ -346,7 +346,7 @@ function clause execute FWVTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW_widen      = SEW * 2;
   let LMUL_pow_widen = LMUL_pow + 1;
 
-  if  illegal_fp_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
+  if  illegal_fp_standard_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
       not(valid_reg_overlap(vs1, vd, LMUL_pow, LMUL_pow_widen)) |
       not(valid_reg_group(vs2, LMUL_pow_widen))
   then return Illegal_Instruction();
@@ -1244,7 +1244,7 @@ function clause execute FWVFTYPE(funct6, vm, vs2, rs1, vd) = {
   let SEW_widen      = SEW * 2;
   let LMUL_pow_widen = LMUL_pow + 1;
 
-  if  illegal_fp_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
+  if  illegal_fp_standard_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
       not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen))
   then return Illegal_Instruction();
 
@@ -1315,7 +1315,7 @@ function clause execute FWVFMATYPE(funct6, vm, rs1, vs2, vd) = {
   let SEW_widen      = SEW * 2;
   let LMUL_pow_widen = LMUL_pow + 1;
 
-  if  illegal_fp_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
+  if  illegal_fp_standard_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
       not(valid_reg_overlap(vs2, vd, LMUL_pow, LMUL_pow_widen))
   then return Illegal_Instruction();
 
@@ -1385,7 +1385,7 @@ function clause execute FWFTYPE(funct6, vm, vs2, rs1, vd) = {
   let SEW_widen      = SEW * 2;
   let LMUL_pow_widen = LMUL_pow + 1;
 
-  if illegal_fp_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
+  if illegal_fp_standard_variable_width(vd, vm, SEW, rm_3b, SEW_widen, LMUL_pow_widen) |
      not(valid_reg_group(vs2, LMUL_pow_widen)) |
      not(valid_reg_group(vd, LMUL_pow_widen))
   then return Illegal_Instruction();

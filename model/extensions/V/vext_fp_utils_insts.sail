@@ -20,19 +20,24 @@ function valid_fp_op(SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
   valid_sew & valid_rm
 }
 
+// Ordinary vector FP instructions have no SEW=8 encoding. Widening and
+// narrowing conversions use valid_fp_op directly because some accept INT8.
+function valid_fp_standard_op(SEW : sew_bitsize, rm_3b : bits(3)) -> bool =
+  strict_and_bool(SEW != 8, valid_fp_op(SEW, rm_3b))
+
 // a. Normal check for floating-point instructions
 function illegal_fp_normal(vd : vregidx, vm : bits(1), SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
-  not(valid_vtype()) | not(valid_rd_mask(vd, vm)) | not(valid_fp_op(SEW, rm_3b))
+  not(valid_vtype()) | not(valid_rd_mask(vd, vm)) | not(valid_fp_standard_op(SEW, rm_3b))
 }
 
 // b. Masked check for floating-point instructions encoded with vm = 0
 function illegal_fp_vd_masked(vd : vregidx, SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
-  not(valid_vtype()) | vd == zvreg | not(valid_fp_op(SEW, rm_3b))
+  not(valid_vtype()) | vd == zvreg | not(valid_fp_standard_op(SEW, rm_3b))
 }
 
 // c. Unmasked check for floating-point instructions encoded with vm = 1
 function illegal_fp_vd_unmasked(SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
-  not(valid_vtype()) | not(valid_fp_op(SEW, rm_3b))
+  not(valid_vtype()) | not(valid_fp_standard_op(SEW, rm_3b))
 }
 
 // d. Variable width check for floating-point widening/narrowing instructions
@@ -41,14 +46,19 @@ function illegal_fp_variable_width(vd : vregidx, vm : bits(1), SEW : sew_bitsize
   not(valid_eew_emul(SEW_new, LMUL_pow_new))
 }
 
+// Widening arithmetic starts at SEW=16. Conversion instructions retain the
+// general width check because some INT8 conversions are valid.
+function illegal_fp_standard_variable_width(vd : vregidx, vm : bits(1), SEW : sew_bitsize, rm_3b : bits(3), SEW_new : int, LMUL_pow_new : int) -> bool =
+  strict_or_bool(SEW == 8, illegal_fp_variable_width(vd, vm, SEW, rm_3b, SEW_new, LMUL_pow_new))
+
 // e. Normal check for floating-point reduction instructions
 function illegal_fp_reduction(SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
-  not(valid_vtype()) | not(assert_vstart(0)) | not(valid_fp_op(SEW, rm_3b))
+  not(valid_vtype()) | not(assert_vstart(0)) | not(valid_fp_standard_op(SEW, rm_3b))
 }
 
 // f. Variable width check for floating-point widening reduction instructions
 function illegal_fp_widening_reduction(SEW : sew_bitsize, rm_3b : bits(3), EEW : int) -> bool = {
-  not(valid_vtype()) | not(assert_vstart(0)) | not(valid_fp_op(SEW, rm_3b)) |
+  not(valid_vtype()) | not(assert_vstart(0)) | not(valid_fp_standard_op(SEW, rm_3b)) |
   not(EEW >= 8 & EEW <= elen)
 }
 
