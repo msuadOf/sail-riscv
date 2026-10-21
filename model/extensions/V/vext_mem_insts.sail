@@ -237,7 +237,7 @@ function clause execute VSSEGTYPE(nf, vm, rs1, width, vs3) = {
 
   assert(-3 <= EMUL_pow & EMUL_pow <= 3);
 
-  if illegal_store(nf, EEW, EMUL_pow) | not(valid_reg_group(vs3, EMUL_pow))
+  if illegal_store(vs3, nf, EEW, EMUL_pow) | not(valid_reg_group(vs3, EMUL_pow))
   then return Illegal_Instruction();
 
   let num_elem = get_num_elem(EMUL_pow, EEW);
@@ -364,7 +364,7 @@ function clause execute VSSSEGTYPE(nf, vm, rs2, rs1, width, vs3) = {
 
   assert(-3 <= EMUL_pow & EMUL_pow <= 3);
 
-  if illegal_store(nf, EEW, EMUL_pow) | not(valid_reg_group(vs3, EMUL_pow))
+  if illegal_store(vs3, nf, EEW, EMUL_pow) | not(valid_reg_group(vs3, EMUL_pow))
   then return Illegal_Instruction();
 
   let num_elem = get_num_elem(EMUL_pow, EEW);
@@ -500,7 +500,7 @@ function clause execute VSXSEGTYPE(nf, vm, vs2, rs1, width, vs3, mop) = {
 
   assert(num_elem > 0);
 
-  if illegal_indexed_store(nf, 2 ^ EEW_index_pow, EMUL_index_pow, EMUL_data_pow) |
+  if illegal_indexed_store(vs3, nf, 2 ^ EEW_index_pow, EMUL_index_pow, EMUL_data_pow) |
      not(valid_reg_group(vs2, EMUL_index_pow)) |
      not(valid_reg_group(vs3, EMUL_data_pow))
   then return Illegal_Instruction();
