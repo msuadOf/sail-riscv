@@ -99,10 +99,15 @@ function clause execute VFWMACCBF16_VF(vm, vs2, rs1, vd) = {
   };
   var result = initial_result;
 
-  let rs1_val = bf16_to_f32_set_flags(F_BF16(rs1));
+  let (rs1_fflags, rs1_val) = bf16_to_f32(F_BF16(rs1));
+  var rs1_flags_accrued : bool = false;
 
   foreach (i from 0 to (num_elem - 1)) {
     if mask[i] == 0b1 then {
+      if not(rs1_flags_accrued) then {
+        accrue_fflags(rs1_fflags);
+        rs1_flags_accrued = true;
+      };
       result[i] = fp_muladd(rm_3b, bf16_to_f32_set_flags(vs2_val[i]), rs1_val, vd_val[i]);
     }
   };
