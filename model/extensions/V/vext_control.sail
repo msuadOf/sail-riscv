@@ -36,16 +36,16 @@ function assert_sew(SEW : int) -> unit = {
 }
 
 function assert_lmul_pow(LMUL_pow : int) -> unit = {
-  match LMUL_pow {
-    -3 => (),
-    -2 => (),
-    -1 => (),
-    0  => (),
-    1  => (),
-    2  => (),
-    3  => (),
-    _  => assert(false)
+  let lmul : option(int) = Some(LMUL_pow);
+  let valid_lmul = strict_or_bool(
+    strict_or_bool(eq_anything(lmul, Some(-3)), eq_anything(lmul, Some(-2))),
+    strict_or_bool(strict_or_bool(eq_anything(lmul, Some(-1)), eq_anything(lmul, Some(0))),
+                   strict_or_bool(eq_anything(lmul, Some(1)), strict_or_bool(eq_anything(lmul, Some(2)), eq_anything(lmul, Some(3))))));
+  if valid_lmul then {
+    ()
   }
+    else  assert(false)
+
 }
 
 function assert_widened_sew(SEW : int) -> unit = {
