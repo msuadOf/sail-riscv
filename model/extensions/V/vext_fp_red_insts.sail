@@ -27,6 +27,57 @@ mapping clause encdec = RFVVTYPE(funct6, vm, vs2, vs1, vd)
      | (currentlyEnabled(Ext_Zve32f) & get_sew() == 32)
      | (currentlyEnabled(Ext_Zve64d) & get_sew() == 64)
 
+$ifdef SYMBOLIC
+function clause execute RFVVTYPE(funct6, vm, vs2, vs1, vd) = {
+  let SEW         = get_sew();
+  let LMUL_pow    = get_lmul_pow();
+  let num_elem_vs = get_num_elem(LMUL_pow, SEW);
+  let rm_3b       = fcsr[FRM];
+  let num_elem_vd = get_num_elem(0, SEW);
+
+  if illegal_fp_reduction(SEW, rm_3b) |
+     not(valid_reg_group(vs2, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW != 8);
+
+  if unsigned(vl) == 0 then return RETIRE_SUCCESS;
+
+  let 'n = num_elem_vs;
+  let 'd = num_elem_vd;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem_vs, vm, zvreg);
+  let vd_val  : vector('d, bits('m)) = read_vreg(num_elem_vd, SEW, 0, vd);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem_vs, SEW, LMUL_pow, vs2);
+
+  let mask : bits('n) = match init_masked_source(num_elem_vs, LMUL_pow, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+
+  var sum : bits('m) = read_single_element(SEW, 0, vs1);
+  var combined_flags : bits_fflags = 0b00000;
+  foreach (i from 0 to (num_elem_vs - 1)) {
+    let (operation_flags, candidate) : (bits_fflags, bits('m)) = match funct6 {
+      // Ordered and unordered sums retain the existing lane order.
+      FVV_VFREDOSUM => fp_add_pure(rm_3b, sum, vs2_val[i]),
+      FVV_VFREDUSUM => fp_add_pure(rm_3b, sum, vs2_val[i]),
+      FVV_VFREDMAX  => fp_max_pure(sum, vs2_val[i]),
+      FVV_VFREDMIN  => fp_min_pure(sum, vs2_val[i]),
+    };
+    combined_flags = combined_flags | ite(mask[i] == 0b1, operation_flags, 0b00000);
+    sum = ite(mask[i] == 0b1, candidate, sum)
+  };
+  accrue_fflags(combined_flags);
+
+  write_single_element(SEW, 0, vd, sum);
+  // other elements in vd are treated as tail elements, currently remain unchanged
+  // TODO: configuration support for agnostic behavior
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$else
 function clause execute RFVVTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW         = get_sew();
   let LMUL_pow    = get_lmul_pow();
@@ -74,6 +125,7 @@ function clause execute RFVVTYPE(funct6, vm, vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$endif
 
 mapping rfvvtype_mnemonic : rfvvfunct6 <-> string = {
   FVV_VFREDOSUM   <-> "vfredosum.vs",
@@ -103,6 +155,55 @@ mapping clause encdec = RFWVVTYPE(funct6, vm, vs2, vs1, vd)
 // (`vfredusum`) variants of the instruction.  This function currently
 // only implements the ordered variant, as it is a valid
 // implementation of the unordered variant; hence `funct6` is ignored.
+$ifdef SYMBOLIC
+function clause execute RFWVVTYPE(_funct6, vm, vs2, vs1, vd) = {
+  let SEW         = get_sew();
+  let LMUL_pow    = get_lmul_pow();
+  let num_elem_vs = get_num_elem(LMUL_pow, SEW);
+  let rm_3b       = fcsr[FRM];
+  let SEW_widen   = SEW * 2;
+
+  if illegal_fp_widening_reduction(SEW, rm_3b, SEW_widen) |
+     not(valid_reg_group(vs2, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW >= 16 & SEW_widen <= 64);
+
+  let num_elem_vd = get_num_elem(0, SEW_widen);
+
+  if unsigned(vl) == 0 then return RETIRE_SUCCESS;
+
+  let 'n = num_elem_vs;
+  let 'd = num_elem_vd;
+  let 'm = SEW;
+  let 'o = SEW_widen;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem_vs, vm, zvreg);
+  let vd_val  : vector('d, bits('o)) = read_vreg(num_elem_vd, SEW_widen, 0, vd);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem_vs, SEW, LMUL_pow, vs2);
+
+  let mask : bits('n) = match init_masked_source(num_elem_vs, LMUL_pow, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+
+  var sum : bits('o) = read_single_element(SEW_widen, 0, vs1);
+  var combined_flags : bits_fflags = 0b00000;
+  foreach (i from 0 to (num_elem_vs - 1)) {
+    let (widen_flags, wide_src) = fp_widen_pure(rm_3b, vs2_val[i]);
+    let (operation_flags, candidate) = fp_add_pure(rm_3b, sum, wide_src);
+    combined_flags = combined_flags | ite(mask[i] == 0b1, widen_flags | operation_flags, 0b00000);
+    sum = ite(mask[i] == 0b1, candidate, sum)
+  };
+  accrue_fflags(combined_flags);
+
+  write_single_element(SEW_widen, 0, vd, sum);
+  // other elements in vd are treated as tail elements, currently remain unchanged
+  // TODO: configuration support for agnostic behavior
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+$else
 function clause execute RFWVVTYPE(_funct6, vm, vs2, vs1, vd) = {
   let SEW         = get_sew();
   let LMUL_pow    = get_lmul_pow();
@@ -148,6 +249,7 @@ function clause execute RFWVVTYPE(_funct6, vm, vs2, vs1, vd) = {
   set_vstart(zeros());
   RETIRE_SUCCESS
 }
+$endif
 
 mapping rfwvvtype_mnemonic : rfwvvfunct6 <-> string = {
   FVV_VFWREDOSUM  <-> "vfwredosum.vs",
