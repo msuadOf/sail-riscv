@@ -520,10 +520,7 @@ mapping clause encdec = VLRETYPE(nf, rs1, width, vd)
      | (currentlyEnabled(Ext_Zve64x) & vlewidth_pow(width) <= 6)
 
 private function process_vlre(nf : nfields, vd : vregidx, load_width_bytes : word_width, rs1 : regidx, elem_per_reg : nat) -> ExecutionResult = {
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
+  let start_element : nat = get_start_element();
   if start_element >= nf * elem_per_reg then return RETIRE_SUCCESS; // no elements are written if vstart >= evl
   let elem_to_align : int = start_element % elem_per_reg;
   var cur_field : int = start_element / elem_per_reg;
@@ -581,10 +578,7 @@ mapping clause encdec = VSRETYPE(nf, rs1, vs3)
   when currentlyEnabled(Ext_Zve32x)
 
 private function process_vsre(nf : nfields, load_width_bytes : word_width, rs1 : regidx, vs3 : vregidx, elem_per_reg : nat) -> ExecutionResult = {
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
+  let start_element : nat = get_start_element();
   if start_element >= nf * elem_per_reg then return RETIRE_SUCCESS; // no elements are written if vstart >= evl
   let elem_to_align : int = start_element % elem_per_reg;
   var cur_field : int = start_element / elem_per_reg;
@@ -651,10 +645,7 @@ mapping clause encdec = VMTYPE(rs1, vd_or_vs3, op)
   when currentlyEnabled(Ext_Zve32x)
 
 private function process_vm(vd_or_vs3 : vregidx, rs1 : regidx, num_elem : nat, evl : nat, op : vmlsop) -> ExecutionResult = {
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
+  let start_element : nat = get_start_element();
   let 'n = num_elem;
   let vd_or_vs3_val : vector('n, bits(8)) = read_vreg(num_elem, 8, 0, vd_or_vs3);
 

@@ -391,10 +391,7 @@ mapping clause encdec = MASKTYPEV (vs2, vs1,  vd)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
 function clause execute MASKTYPEV(vs2, vs1, vd) = {
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
+  let start_element : nat = get_start_element();
   let end_element   = get_end_element();
   let SEW           = get_sew();
   let LMUL_pow      = get_lmul_pow();
@@ -898,10 +895,7 @@ mapping clause encdec = MASKTYPEX(vs2, rs1, vd)
 
 
 function clause execute MASKTYPEX(vs2, rs1, vd) = {
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
+  let start_element : nat = get_start_element();
 
   let end_element   = get_end_element();
   let SEW           = get_sew();
@@ -1380,10 +1374,7 @@ function masktypei_result(num_elem, start_element, end_element, real_num_elem, v
 }
 
 function clause execute MASKTYPEI(vs2, simm, vd) = {
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
+  let start_element : nat = get_start_element();
 
   let end_element   = get_end_element();
   let SEW           = get_sew();
@@ -1479,10 +1470,7 @@ mapping clause encdec = VMVRTYPE(vs2, nreg, vd)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
 function clause execute VMVRTYPE(vs2, nreg, vd) = {
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
+  let start_element : nat = get_start_element();
   let SEW     = get_sew();
   let EMUL    = nreg;
 
@@ -2063,10 +2051,7 @@ mapping clause encdec = MVVCOMPRESS(vs2, vs1, vd)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
 function clause execute MVVCOMPRESS(vs2, vs1, vd) = {
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
+  let start_element : nat = get_start_element();
   let end_element = get_end_element();
   let SEW         = get_sew();
   let LMUL_pow    = get_lmul_pow();
