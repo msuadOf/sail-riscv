@@ -15,9 +15,10 @@
 // 2. Valid floating-point rounding mode
 function valid_fp_op(SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
   // SEW=8 is valid for conversions between INT8 and FP16(vfncvt[.rtz].x[u].f.w, etc.)
-  let valid_sew = (SEW >= 8 & SEW <= 64);
-  let valid_rm = not(rm_3b == 0b101 | rm_3b == 0b110 | rm_3b == 0b111);
-  valid_sew & valid_rm
+  let valid_sew = strict_and_bool(SEW >= 8, SEW <= 64);
+  let valid_rm = not_bool(strict_or_bool(eq_anything(rm_3b, 0b101),
+                     strict_or_bool(eq_anything(rm_3b, 0b110), eq_anything(rm_3b, 0b111))));
+  strict_and_bool(valid_sew, valid_rm)
 }
 
 // Ordinary vector FP instructions have no SEW=8 encoding. Widening and
@@ -27,7 +28,9 @@ function valid_fp_standard_op(SEW : sew_bitsize, rm_3b : bits(3)) -> bool =
 
 // a. Normal check for floating-point instructions
 function illegal_fp_normal(vd : vregidx, vm : bits(1), SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
-  not(valid_vtype()) | not(valid_rd_mask(vd, vm)) | not(valid_fp_standard_op(SEW, rm_3b))
+  strict_or_bool(not_bool(valid_vtype()),
+                 strict_or_bool(not_bool(valid_rd_mask(vd, vm)),
+                                not_bool(valid_fp_standard_op(SEW, rm_3b))))
 }
 
 // b. Masked check for floating-point instructions encoded with vm = 0
@@ -53,13 +56,15 @@ function illegal_fp_standard_variable_width(vd : vregidx, vm : bits(1), SEW : se
 
 // e. Normal check for floating-point reduction instructions
 function illegal_fp_reduction(SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
-  not(valid_vtype()) | not(assert_vstart(0)) | not(valid_fp_standard_op(SEW, rm_3b))
+  // Reductions have no SEW=8 encoding, but still check RM independently.
+  strict_or_bool(not_bool(valid_vtype()),
+                 strict_or_bool(not_bool(eq_anything(vstart, zeros())),
+                                not_bool(valid_fp_standard_op(SEW, rm_3b))))
 }
 
 // f. Variable width check for floating-point widening reduction instructions
 function illegal_fp_widening_reduction(SEW : sew_bitsize, rm_3b : bits(3), EEW : int) -> bool = {
-  not(valid_vtype()) | not(assert_vstart(0)) | not(valid_fp_standard_op(SEW, rm_3b)) |
-  not(EEW >= 8 & EEW <= elen)
+  illegal_fp_reduction(SEW, rm_3b) | not(EEW >= 8 & EEW <= elen)
 }
 
 // Floating point classification functions
@@ -187,6 +192,134 @@ function negate_fp(xf) = {
 }
 
 // Floating point functions using softfloat interface
+// SYMBOLIC lanes compute flags and bits without changing fcsr. The original
+// helpers below retain their per-call side effects for the C++ model.
+$ifdef SYMBOLIC
+val fp_add_pure : forall 'm, 'm in {16, 32, 64}. (bits(3), bits('m), bits('m)) -> (bits_fflags, bits('m))
+function fp_add_pure(rm_3b, op1, op2) = match 'm {
+  16 => riscv_f16Add(rm_3b, op1, op2),
+  32 => riscv_f32Add(rm_3b, op1, op2),
+  64 => riscv_f64Add(rm_3b, op1, op2)
+}
+
+val fp_sub_pure : forall 'm, 'm in {16, 32, 64}. (bits(3), bits('m), bits('m)) -> (bits_fflags, bits('m))
+function fp_sub_pure(rm_3b, op1, op2) = match 'm {
+  16 => riscv_f16Sub(rm_3b, op1, op2),
+  32 => riscv_f32Sub(rm_3b, op1, op2),
+  64 => riscv_f64Sub(rm_3b, op1, op2)
+}
+
+val fp_mul_pure : forall 'm, 'm in {16, 32, 64}. (bits(3), bits('m), bits('m)) -> (bits_fflags, bits('m))
+function fp_mul_pure(rm_3b, op1, op2) = match 'm {
+  16 => riscv_f16Mul(rm_3b, op1, op2),
+  32 => riscv_f32Mul(rm_3b, op1, op2),
+  64 => riscv_f64Mul(rm_3b, op1, op2)
+}
+
+val fp_div_pure : forall 'm, 'm in {16, 32, 64}. (bits(3), bits('m), bits('m)) -> (bits_fflags, bits('m))
+function fp_div_pure(rm_3b, op1, op2) = match 'm {
+  16 => riscv_f16Div(rm_3b, op1, op2),
+  32 => riscv_f32Div(rm_3b, op1, op2),
+  64 => riscv_f64Div(rm_3b, op1, op2)
+}
+
+val fp_muladd_pure : forall 'm, 'm in {16, 32, 64}. (bits(3), bits('m), bits('m), bits('m)) -> (bits_fflags, bits('m))
+function fp_muladd_pure(rm_3b, op1, op2, opadd) = match 'm {
+  16 => riscv_f16MulAdd(rm_3b, op1, op2, opadd),
+  32 => riscv_f32MulAdd(rm_3b, op1, op2, opadd),
+  64 => riscv_f64MulAdd(rm_3b, op1, op2, opadd)
+}
+
+val fp_nmuladd_pure : forall 'm, 'm in {16, 32, 64}. (bits(3), bits('m), bits('m), bits('m)) -> (bits_fflags, bits('m))
+function fp_nmuladd_pure(rm_3b, op1, op2, opadd) =
+  fp_muladd_pure(rm_3b, negate_fp(op1), op2, opadd)
+
+val fp_mulsub_pure : forall 'm, 'm in {16, 32, 64}. (bits(3), bits('m), bits('m), bits('m)) -> (bits_fflags, bits('m))
+function fp_mulsub_pure(rm_3b, op1, op2, opsub) =
+  fp_muladd_pure(rm_3b, op1, op2, negate_fp(opsub))
+
+val fp_nmulsub_pure : forall 'm, 'm in {16, 32, 64}. (bits(3), bits('m), bits('m), bits('m)) -> (bits_fflags, bits('m))
+function fp_nmulsub_pure(rm_3b, op1, op2, opsub) =
+  fp_muladd_pure(rm_3b, negate_fp(op1), op2, negate_fp(opsub))
+
+val fp_eq_pure : forall 'm, 'm in {16, 32, 64}. (bits('m), bits('m)) -> (bits_fflags, bool)
+function fp_eq_pure(op1, op2) = match 'm {
+  16 => riscv_f16Eq(op1, op2),
+  32 => riscv_f32Eq(op1, op2),
+  64 => riscv_f64Eq(op1, op2)
+}
+
+val fp_ne_pure : forall 'm, 'm in {16, 32, 64}. (bits('m), bits('m)) -> (bits_fflags, bool)
+function fp_ne_pure(op1, op2) = {
+  let (fflags, eq) = fp_eq_pure(op1, op2);
+  (fflags, not_bool(eq))
+}
+
+val fp_lt_pure : forall 'm, 'm in {16, 32, 64}. (bits('m), bits('m)) -> (bits_fflags, bool)
+function fp_lt_pure(op1, op2) = match 'm {
+  16 => riscv_f16Lt(op1, op2),
+  32 => riscv_f32Lt(op1, op2),
+  64 => riscv_f64Lt(op1, op2)
+}
+
+val fp_le_pure : forall 'm, 'm in {16, 32, 64}. (bits('m), bits('m)) -> (bits_fflags, bool)
+function fp_le_pure(op1, op2) = match 'm {
+  16 => riscv_f16Le(op1, op2),
+  32 => riscv_f32Le(op1, op2),
+  64 => riscv_f64Le(op1, op2)
+}
+
+val fp_gt_pure : forall 'm, 'm in {16, 32, 64}. (bits('m), bits('m)) -> (bits_fflags, bool)
+function fp_gt_pure(op1, op2) = {
+  let (fflags, le) = fp_le_pure(op1, op2);
+  (fflags, ite(eq_anything(fflags[4], 0b1), false, not_bool(le)))
+}
+
+val fp_ge_pure : forall 'm, 'm in {16, 32, 64}. (bits('m), bits('m)) -> (bits_fflags, bool)
+function fp_ge_pure(op1, op2) = {
+  let (fflags, lt) = fp_lt_pure(op1, op2);
+  (fflags, ite(eq_anything(fflags[4], 0b1), false, not_bool(lt)))
+}
+
+val fp_widen_pure : forall 'm, 'm in {16, 32}. (bits(3), bits('m)) -> (bits_fflags, bits('m * 2))
+function fp_widen_pure(rm_3b, nval) = match 'm {
+  16 => riscv_f16ToF32(rm_3b, nval),
+  32 => riscv_f32ToF64(rm_3b, nval)
+}
+
+val fp_class_onehot_pure : forall 'm, 'm in {16, 32, 64}. bits('m) -> bits(10)
+function fp_class_onehot_pure(raw) = {
+  let fp : float_bits('m) = float_decompose(raw);
+  let negative = eq_anything(fp.sign, 0b1);
+  let positive = not_bool(negative);
+  let exp_zero = eq_anything(fp.exp, zeros());
+  let exp_ones = eq_anything(fp.exp, ones());
+  let mant_zero = eq_anything(fp.mantissa, zeros());
+  let nan = strict_and_bool(exp_ones, not_bool(mant_zero));
+  let quiet_zero : bool = match 'm {
+    16 => eq_anything(raw[9], 0b0),
+    32 => eq_anything(raw[22], 0b0),
+    64 => eq_anything(raw[51], 0b0)
+  };
+  let snan = strict_and_bool(nan, quiet_zero);
+  let qnan = strict_and_bool(nan, not_bool(snan));
+  let inf = strict_and_bool(exp_ones, mant_zero);
+  let zero = strict_and_bool(exp_zero, mant_zero);
+  let sub = strict_and_bool(exp_zero, not_bool(mant_zero));
+  let normal = strict_and_bool(not_bool(exp_zero), not_bool(exp_ones));
+  isla_bool_to_bit(qnan) @
+  isla_bool_to_bit(snan) @
+  isla_bool_to_bit(strict_and_bool(positive, inf)) @
+  isla_bool_to_bit(strict_and_bool(positive, normal)) @
+  isla_bool_to_bit(strict_and_bool(positive, sub)) @
+  isla_bool_to_bit(strict_and_bool(positive, zero)) @
+  isla_bool_to_bit(strict_and_bool(negative, zero)) @
+  isla_bool_to_bit(strict_and_bool(negative, sub)) @
+  isla_bool_to_bit(strict_and_bool(negative, normal)) @
+  isla_bool_to_bit(strict_and_bool(negative, inf))
+}
+$endif
+
 val fp_add: forall 'm, 'm in {16, 32, 64}. (bits(3), bits('m), bits('m)) -> bits('m)
 function fp_add(rm_3b, op1, op2) = {
   let (fflags, result_val) : (bits_fflags, bits('m)) = match 'm {
@@ -400,6 +533,53 @@ function riscv_f32ToUi16(rm : bits_rm, v : bits_S) -> (bits_fflags, bits(16)) = 
   if unsigned(sig32) > unsigned(ones(16)) then (nvFlag(), ones(16))
   else (flag, sig32[15 .. 0]);
 }
+
+$ifdef SYMBOLIC
+// The narrow integer adapters keep the original saturation rule while using
+// bitvector ITEs, so an inactive lane never forks on its converted value.
+function riscv_f16ToI16_pure(rm : bits_rm, v : bits_H) -> (bits_fflags, bits(16)) = {
+  let (flag, sig32) = riscv_f16ToI32(rm, v);
+  let overflow = not_bool(eq_anything(sig32, sign_extend(sig32[15 .. 0])));
+  let limit = ite(eq_anything(sig32[31], 0b1), 0x8000, 0x7fff);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[15 .. 0]))
+}
+
+function riscv_f16ToI8_pure(rm : bits_rm, v : bits_H) -> (bits_fflags, bits(8)) = {
+  let (flag, sig32) = riscv_f16ToI32(rm, v);
+  let overflow = not_bool(eq_anything(sig32, sign_extend(sig32[7 .. 0])));
+  let limit = ite(eq_anything(sig32[31], 0b1), 0x80, 0x7f);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[7 .. 0]))
+}
+
+function riscv_f32ToI16_pure(rm : bits_rm, v : bits_S) -> (bits_fflags, bits(16)) = {
+  let (flag, sig32) = riscv_f32ToI32(rm, v);
+  let overflow = not_bool(eq_anything(sig32, sign_extend(sig32[15 .. 0])));
+  let limit = ite(eq_anything(sig32[31], 0b1), 0x8000, 0x7fff);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[15 .. 0]))
+}
+
+function riscv_f16ToUi16_pure(rm : bits_rm, v : bits_H) -> (bits_fflags, bits(16)) = {
+  let (flag, sig32) = riscv_f16ToUi32(rm, v);
+  let overflow = not_bool(eq_anything(sig32[31 .. 16], zeros(16)));
+  let limit = ones(16);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[15 .. 0]))
+}
+
+function riscv_f16ToUi8_pure(rm : bits_rm, v : bits_H) -> (bits_fflags, bits(8)) = {
+  let (flag, sig32) = riscv_f16ToUi32(rm, v);
+  let overflow = not_bool(eq_anything(sig32[31 .. 8], zeros(24)));
+  let limit = ones(8);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[7 .. 0]))
+}
+
+function riscv_f32ToUi16_pure(rm : bits_rm, v : bits_S) -> (bits_fflags, bits(16)) = {
+  let (flag, sig32) = riscv_f32ToUi32(rm, v);
+  let overflow = not_bool(eq_anything(sig32[31 .. 16], zeros(16)));
+  let limit = ones(16);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[15 .. 0]))
+}
+
+$endif
 
 val rsqrt7 : forall 'm, 'm in {16, 32, 64}. (bits('m), bool) -> bits_D
 function rsqrt7 (v, sub) = {
