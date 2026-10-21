@@ -394,6 +394,32 @@ mapping clause assembly = FWVTYPE(funct6, vm, vs2, vs1, vd)
 // ***************************** OPFVV (VFUNARY0) *******************************
 union clause instruction = VFUNARY0 : (bits(1), vregidx, vfunary0, vregidx)
 
+$ifdef SYMBOLIC
+val encdec_vfunary0_vs1 : vfunary0 <-> bits(5)
+
+function encdec_vfunary0_vs1_forwards(value) = match value {
+  FV_CVT_XU_F => 0b00000,
+  FV_CVT_X_F => 0b00001,
+  FV_CVT_F_XU => 0b00010,
+  FV_CVT_F_X => 0b00011,
+  FV_CVT_RTZ_XU_F => 0b00110,
+  FV_CVT_RTZ_X_F => 0b00111
+}
+
+function encdec_vfunary0_vs1_forwards_matches(_) = true
+
+function encdec_vfunary0_vs1_backwards(bits) = match bits {
+  0b00000 => FV_CVT_XU_F,
+  0b00001 => FV_CVT_X_F,
+  0b00010 => FV_CVT_F_XU,
+  0b00011 => FV_CVT_F_X,
+  0b00110 => FV_CVT_RTZ_XU_F,
+  0b00111 => FV_CVT_RTZ_X_F
+}
+
+function encdec_vfunary0_vs1_backwards_matches(bits) =
+  strict_or_bool(strict_or_bool(strict_or_bool(eq_anything(bits, 0b00000), eq_anything(bits, 0b00001)), strict_or_bool(eq_anything(bits, 0b00010), eq_anything(bits, 0b00011))), strict_or_bool(eq_anything(bits, 0b00110), eq_anything(bits, 0b00111)))
+$else
 mapping encdec_vfunary0_vs1 : vfunary0 <-> bits(5) = {
   FV_CVT_XU_F       <-> 0b00000,
   FV_CVT_X_F        <-> 0b00001,
@@ -402,6 +428,7 @@ mapping encdec_vfunary0_vs1 : vfunary0 <-> bits(5) = {
   FV_CVT_RTZ_XU_F   <-> 0b00110,
   FV_CVT_RTZ_X_F    <-> 0b00111
 }
+$endif
 
 mapping clause encdec = VFUNARY0(vm, vs2, vfunary0, vd)
   <-> 0b010010 @ vm @ encdec_vreg(vs2) @ encdec_vfunary0_vs1(vfunary0) @ 0b001 @ encdec_vreg(vd) @ 0b1010111
@@ -516,6 +543,34 @@ mapping clause assembly = VFUNARY0(vm, vs2, vfunary0, vd)
 // ************************* OPFVV (VFUNARY0 Widening) **************************
 union clause instruction = VFWUNARY0 : (bits(1), vregidx, vfwunary0, vregidx)
 
+$ifdef SYMBOLIC
+val encdec_vfwunary0_vs1 : vfwunary0 <-> bits(5)
+
+function encdec_vfwunary0_vs1_forwards(value) = match value {
+  FWV_CVT_XU_F => 0b01000,
+  FWV_CVT_X_F => 0b01001,
+  FWV_CVT_F_XU => 0b01010,
+  FWV_CVT_F_X => 0b01011,
+  FWV_CVT_F_F => 0b01100,
+  FWV_CVT_RTZ_XU_F => 0b01110,
+  FWV_CVT_RTZ_X_F => 0b01111
+}
+
+function encdec_vfwunary0_vs1_forwards_matches(_) = true
+
+function encdec_vfwunary0_vs1_backwards(bits) = match bits {
+  0b01000 => FWV_CVT_XU_F,
+  0b01001 => FWV_CVT_X_F,
+  0b01010 => FWV_CVT_F_XU,
+  0b01011 => FWV_CVT_F_X,
+  0b01100 => FWV_CVT_F_F,
+  0b01110 => FWV_CVT_RTZ_XU_F,
+  0b01111 => FWV_CVT_RTZ_X_F
+}
+
+function encdec_vfwunary0_vs1_backwards_matches(bits) =
+  strict_or_bool(strict_or_bool(strict_or_bool(eq_anything(bits, 0b01000), eq_anything(bits, 0b01001)), strict_or_bool(eq_anything(bits, 0b01010), eq_anything(bits, 0b01011))), strict_or_bool(strict_or_bool(eq_anything(bits, 0b01100), eq_anything(bits, 0b01110)), eq_anything(bits, 0b01111)))
+$else
 mapping encdec_vfwunary0_vs1 : vfwunary0 <-> bits(5) = {
   FWV_CVT_XU_F      <-> 0b01000,
   FWV_CVT_X_F       <-> 0b01001,
@@ -525,6 +580,7 @@ mapping encdec_vfwunary0_vs1 : vfwunary0 <-> bits(5) = {
   FWV_CVT_RTZ_XU_F  <-> 0b01110,
   FWV_CVT_RTZ_X_F   <-> 0b01111
 }
+$endif
 
 mapping clause encdec = VFWUNARY0(vm, vs2, vfwunary0, vd)
   <-> 0b010010 @ vm @ encdec_vreg(vs2) @ encdec_vfwunary0_vs1(vfwunary0) @ 0b001 @ encdec_vreg(vd) @ 0b1010111
@@ -651,6 +707,36 @@ mapping clause assembly = VFWUNARY0(vm, vs2, vfwunary0, vd)
 // ************************ OPFVV (VFUNARY0 Narrowing) **************************
 union clause instruction = VFNUNARY0 : (bits(1), vregidx, vfnunary0, vregidx)
 
+$ifdef SYMBOLIC
+val encdec_vfnunary0_vs1 : vfnunary0 <-> bits(5)
+
+function encdec_vfnunary0_vs1_forwards(value) = match value {
+  FNV_CVT_XU_F => 0b10000,
+  FNV_CVT_X_F => 0b10001,
+  FNV_CVT_F_XU => 0b10010,
+  FNV_CVT_F_X => 0b10011,
+  FNV_CVT_F_F => 0b10100,
+  FNV_CVT_ROD_F_F => 0b10101,
+  FNV_CVT_RTZ_XU_F => 0b10110,
+  FNV_CVT_RTZ_X_F => 0b10111
+}
+
+function encdec_vfnunary0_vs1_forwards_matches(_) = true
+
+function encdec_vfnunary0_vs1_backwards(bits) = match bits {
+  0b10000 => FNV_CVT_XU_F,
+  0b10001 => FNV_CVT_X_F,
+  0b10010 => FNV_CVT_F_XU,
+  0b10011 => FNV_CVT_F_X,
+  0b10100 => FNV_CVT_F_F,
+  0b10101 => FNV_CVT_ROD_F_F,
+  0b10110 => FNV_CVT_RTZ_XU_F,
+  0b10111 => FNV_CVT_RTZ_X_F
+}
+
+function encdec_vfnunary0_vs1_backwards_matches(bits) =
+  strict_or_bool(strict_or_bool(strict_or_bool(eq_anything(bits, 0b10000), eq_anything(bits, 0b10001)), strict_or_bool(eq_anything(bits, 0b10010), eq_anything(bits, 0b10011))), strict_or_bool(strict_or_bool(eq_anything(bits, 0b10100), eq_anything(bits, 0b10101)), strict_or_bool(eq_anything(bits, 0b10110), eq_anything(bits, 0b10111))))
+$else
 mapping encdec_vfnunary0_vs1 : vfnunary0 <-> bits(5) = {
   FNV_CVT_XU_F      <-> 0b10000,
   FNV_CVT_X_F       <-> 0b10001,
@@ -661,6 +747,7 @@ mapping encdec_vfnunary0_vs1 : vfnunary0 <-> bits(5) = {
   FNV_CVT_RTZ_XU_F  <-> 0b10110,
   FNV_CVT_RTZ_X_F   <-> 0b10111
 }
+$endif
 
 mapping clause encdec = VFNUNARY0(vm, vs2, vfnunary0, vd)
   <-> 0b010010 @ vm @ encdec_vreg(vs2) @ encdec_vfnunary0_vs1(vfnunary0) @ 0b001 @ encdec_vreg(vd) @ 0b1010111
@@ -796,12 +883,35 @@ mapping clause assembly = VFNUNARY0(vm, vs2, vfnunary0, vd)
 // ***************************** OPFVV (VFUNARY1) *******************************
 union clause instruction = VFUNARY1 : (bits(1), vregidx, vfunary1, vregidx)
 
+$ifdef SYMBOLIC
+val encdec_vfunary1_vs1 : vfunary1 <-> bits(5)
+
+function encdec_vfunary1_vs1_forwards(value) = match value {
+  FVV_VSQRT => 0b00000,
+  FVV_VRSQRT7 => 0b00100,
+  FVV_VREC7 => 0b00101,
+  FVV_VCLASS => 0b10000
+}
+
+function encdec_vfunary1_vs1_forwards_matches(_) = true
+
+function encdec_vfunary1_vs1_backwards(bits) = match bits {
+  0b00000 => FVV_VSQRT,
+  0b00100 => FVV_VRSQRT7,
+  0b00101 => FVV_VREC7,
+  0b10000 => FVV_VCLASS
+}
+
+function encdec_vfunary1_vs1_backwards_matches(bits) =
+  strict_or_bool(strict_or_bool(eq_anything(bits, 0b00000), eq_anything(bits, 0b00100)), strict_or_bool(eq_anything(bits, 0b00101), eq_anything(bits, 0b10000)))
+$else
 mapping encdec_vfunary1_vs1 : vfunary1 <-> bits(5) = {
   FVV_VSQRT       <-> 0b00000,
   FVV_VRSQRT7     <-> 0b00100,
   FVV_VREC7       <-> 0b00101,
   FVV_VCLASS      <-> 0b10000
 }
+$endif
 
 mapping clause encdec = VFUNARY1(vm, vs2, vfunary1, vd)
   <-> 0b010011 @ vm @ encdec_vreg(vs2) @ encdec_vfunary1_vs1(vfunary1) @ 0b001 @ encdec_vreg(vd) @ 0b1010111
