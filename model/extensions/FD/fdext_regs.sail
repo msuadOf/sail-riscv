@@ -47,7 +47,7 @@ function nan_box(n, x) = ones('m - 'n) @ x
 // TODO: Use right-open interval when available. See https://github.com/rems-project/sail/issues/471
 val nan_unbox : forall 'n 'm, 'm in {16, 32, 64, 128} & 'n >= 'm . (implicit('m), bits('n)) -> bits('m)
 function nan_unbox(m, x) = if 'n == 'm then x else (
-  if x['n - 1 .. 'm] == ones() then x['m - 1 .. 0] else canonical_NaN()
+  ite(eq_anything(x['n - 1 .. 'm], ones()), x['m - 1 .. 0], canonical_NaN())
 )
 
 // ***************************************************************
@@ -250,24 +250,44 @@ val rF_from_vector = monadic "read_register_from_vector" : forall 'n, 0 <= 'n <=
 
 val get_F_bits : fregidx -> flenbits effect {rreg}
 
-function get_F_bits(Fregidx(i) : fregidx) = if __isla_vector_fpr then rF_from_vector(unsigned(i), FPRs) else rF_bits(Fregidx(i))
+function get_F_bits(Fregidx(i) : fregidx) = {
+  if __isla_vector_fpr then {
+    assert(hartSupports(Ext_F));
+    fregval_from_freg(rF_from_vector(unsigned(i), FPRs))
+  } else rF_bits(Fregidx(i))
+}
 
 val get_F : fregno -> flenbits effect {rreg}
 
-function get_F(Fregno(r) : fregno) = if __isla_vector_fpr then rF_from_vector(r, FPRs) else rF(Fregno(r))
+function get_F(Fregno(r) : fregno) = {
+  if __isla_vector_fpr then {
+    assert(hartSupports(Ext_F));
+    fregval_from_freg(rF_from_vector(r, FPRs))
+  } else rF(Fregno(r))
+}
 
 val wF_from_vector = monadic "write_register_from_vector" : forall 'n, 0 <= 'n <= 31. (int('n), flenbits, vector(32, dec, register(flenbits))) -> unit
 
 val set_F_bits : (fregidx, flenbits) -> unit effect {wreg}
 
 function set_F_bits(Fregidx(i) : fregidx, data : flenbits) = {
-    if __isla_vector_fpr then wF_from_vector(unsigned(i), data, FPRs) else wF_bits(Fregidx(i), data)
+    if __isla_vector_fpr then {
+      assert(hartSupports(Ext_F));
+      wF_from_vector(unsigned(i), fregval_into_freg(data), FPRs);
+      freg_write_callback(Fregidx(i), data);
+      dirty_fd_context();
+    } else wF_bits(Fregidx(i), data)
 }
 
 val set_F : (fregno, flenbits) -> unit effect {wreg}
 
 function set_F(Fregno(r) : fregno, v) = {
-    if __isla_vector_fpr then wF_from_vector(r, v, FPRs) else wF(Fregno(r), v)
+    if __isla_vector_fpr then {
+      assert(hartSupports(Ext_F));
+      wF_from_vector(r, fregval_into_freg(v), FPRs);
+      freg_write_callback(Fregidx(to_bits(r)), v);
+      dirty_fd_context();
+    } else wF(Fregno(r), v)
 }
 $else
 val get_F_bits : fregidx -> flenbits effect {rreg}
@@ -518,6 +538,21 @@ function write_fcsr(frm : bits(3), fflags : bits(5)) -> unit = {
 }
 
 // OR flags into the fflags register.
+$ifdef SYMBOLIC
+function accrue_fflags(flags : bits(5)) -> unit = {
+  let old = fcsr[FFLAGS];
+  let f = old | flags;
+  let changed = not_bool(eq_anything(old, f));
+  fcsr[FFLAGS] = f;
+  assert(strict_or_bool(not_bool(changed), hartSupports(Ext_F) != hartSupports(Ext_Zfinx)));
+  if hartSupports(Ext_F) then {
+    let dirty = [mstatus with FS = extStatus_to_bits(Dirty), SD = 0b1];
+    mstatus.bits = ite(changed, dirty.bits, mstatus.bits);
+  };
+  csr_write_callback("fflags", zero_extend(fcsr[FFLAGS]));
+  csr_write_callback("fcsr", zero_extend(fcsr.bits));
+}
+$else
 function accrue_fflags(flags : bits(5)) -> unit = {
   let f = fcsr[FFLAGS] | flags;
   if  fcsr[FFLAGS] != f
@@ -528,3 +563,4 @@ function accrue_fflags(flags : bits(5)) -> unit = {
   csr_write_callback("fflags", zero_extend(fcsr[FFLAGS]));
   csr_write_callback("fcsr", zero_extend(fcsr.bits));
 }
+$endif

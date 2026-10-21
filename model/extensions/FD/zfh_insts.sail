@@ -36,7 +36,7 @@ function fmake_H(sign : bits(1), exp : bits(5), mant : bits(10)) -> bits(16) =
 
 function negate_H(xf16 : bits(16)) -> bits(16) = {
   let (sign, exp, mant) = fsplit_H (xf16);
-  let new_sign = if (sign == 0b0) then 0b1 else 0b0;
+  let new_sign = sign ^ 0b1;
   fmake_H (new_sign, exp, mant)
 }
 

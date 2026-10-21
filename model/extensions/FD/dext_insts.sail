@@ -123,10 +123,10 @@ function f_is_NaN_D(x64 : bits(64)) -> bool = {
 
 function negate_D(x64 : bits(64)) -> bits(64) = {
   let (sign, exp, mant) = fsplit_D (x64);
-  let new_sign = if (sign == 0b0) then 0b1 else 0b0;
+  let new_sign = sign ^ 0b1;
   fmake_D (new_sign, exp, mant)
 }
-
+// 旧辅助函数：当前无调用；相同 NaN 位型会误判为 true；改用 riscv_f64Eq 时须将 (fflags, bool) 调整为旧序 (bool, fflags)。
 function feq_quiet_D(v1 : bits(64), v2 : bits(64)) -> (bool, bits(5)) = {
   let (s1, e1, m1) = fsplit_D (v1);
   let (s2, e2, m2) = fsplit_D (v2);
@@ -142,7 +142,7 @@ function feq_quiet_D(v1 : bits(64), v2 : bits(64)) -> (bool, bits(5)) = {
 
   (result, fflags)
 }
-
+// 旧辅助函数：当前无调用；NaN 未屏蔽且 -0 < +0 误判 true；is_quiet 为 true 用 riscv_f64Lt_quiet，否则用 riscv_f64Lt，并调整返回元组顺序。
 function flt_D(v1 : bits(64), v2 : bits(64), is_quiet : bool) -> (bool, bits(5)) = {
   let (s1, e1, m1) = fsplit_D (v1);
   let (s2, e2, m2) = fsplit_D (v2);
