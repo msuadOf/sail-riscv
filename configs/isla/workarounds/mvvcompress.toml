@@ -11,7 +11,7 @@ on_limit_reached = "concretize"
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
-start_line = 2095
+start_line = 2222
 start_column = 4
-end_line = 2102
+end_line = 2229
 end_column = 5

@@ -39,9 +39,9 @@ Illegal_Instruction = 2
 
 # VV_VRGATHER 的逐 lane 循环体：区间内有 mask 判定和 idx < VLMAX 判定两个分支点。
 # vrgather.vv 是路径数最多的子指令（全展开实测 491 条），预算 0 表示整段只抽样、不 fork。
-# Sail start 181:      if mask[i] == 0b1 then {
+# Sail start 181:            if mask[i] == 0b1 then {
 # ...
-# Sail end   187:      }
+# Sail end   187:            }
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
@@ -51,9 +51,9 @@ end_line = 187
 end_column = 7
 
 # VV_VRGATHEREI16 的逐 lane 循环体：同上，全展开实测 623 条，是最多的一条。
-# Sail start 190:      if mask[i] == 0b1 then {
+# Sail start 190:            if mask[i] == 0b1 then {
 # ...
-# Sail end   196:      }
+# Sail end   196:            }
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
@@ -65,30 +65,30 @@ end_column = 7
 # get_fixed_rounding_incr 由 VV_VSMUL/VV_VSSRL/VV_VSSRA 逐 lane 调用，区间内有 shift==0
 # 判定和 4 路 rounding mode 判定等多个分支点，只靠 per-scope 预算会得到 2^k。
 # 这三条子指令全展开实测 149/113/109 条，都过了 100，所以预算取 0：整段只抽样、不 fork。
-# Sail start 612:  if shift_amount == 0 then 0b0
+# Sail start 655:    if shift_amount == 0 then 0b0
 # ...
-# Sail end   632:  }
+# Sail end   675:    }
 # 配置终点使用紧随函数后的空行 634:1。
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 612
+start_line = 655
 start_column = 2
-end_line = 634
+end_line = 677
 end_column = 1
 
 # valid_reg_overlap：vrgather/vrgatherei16 的 vs1 EMUL 与 vd 不同，会走进这里的
 # 大小比较分支反复 fork（实测 77:5 与 77:2 合计近 200 次）；非 gather 的两个 EMUL
 # 相等，内层是具体值、根本不 fork，所以这个预算实际只压 gather 这两条子指令。
-# Sail start 71:function valid_reg_overlap(rs : vregidx, rd : vregidx, EMUL_pow_rs : int, EMUL_pow_rd : int) -> bool = {
+# Sail start 73:function valid_reg_overlap(rs : vregidx, rd : vregidx, EMUL_pow_rs : int, EMUL_pow_rd : int) -> bool = {
 # ...
-# Sail end   85:  } else true;
+# Sail end   87:    } else true;
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 71
+start_line = 73
 start_column = 2
-end_line = 85
+end_line = 87
 end_column = 3
 
 # VV_VRGATHER / VV_VRGATHEREI16 专属的 src/dst 重叠判定 `vs1 == vd | vs2 == vd`。
@@ -99,8 +99,8 @@ end_column = 3
 # 16:1 偏置 jump 方向 = 只让 1/16 的路径采样到"重叠为真"，其余 15/16 继续走合法分支。
 # 这会让原本非法的路径转去合法侧、成功覆盖变广——是想要的效果。代价是总路径数会升高，
 # 由下面 gather 逐 lane 循环体上的局部 limit 控制不爆炸（>1000），最终条数由档 A 兜底。
-# Sail start 65:                               then vs1 == vd | vs2 == vd
-# Sail end   65:                               then vs1 == vd | vs2 == vd
+# Sail start 65:                                                              then vs1 == vd | vs2 == vd
+# Sail end   65:                                                              then vs1 == vd | vs2 == vd
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 sample_bias = 16
@@ -117,9 +117,9 @@ end_column = 57
 
 # VV_VSSUBU 的逐 lane 循环体：除了 mask 判定还多一个 unsigned 比较分支，比其它算术
 # arm 多一倍（全展开实测 133 条）。预算 0 => 整段只抽样。
-# Sail start 121:      if mask[i] == 0b1 then {
+# Sail start 121:            if mask[i] == 0b1 then {
 # ...
-# Sail end   124:      }
+# Sail end   124:            }
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
@@ -130,9 +130,9 @@ end_column = 7
 
 # VV_VSMUL 的逐 lane 循环体：mask 判定之外还有 rounding 与 saturation，比其它算术 arm
 # 多一档（全展开实测 101 条，刚好过线）。预算 0 => 整段只抽样。
-# Sail start 131:      if mask[i] == 0b1 then {
+# Sail start 131:            if mask[i] == 0b1 then {
 # ...
-# Sail end   136:      }
+# Sail end   136:            }
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"

@@ -10,16 +10,16 @@ on_limit_reached = "concretize"
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 612
+start_line = 655
 start_column = 2
-end_line = 634
+end_line = 677
 end_column = 1
 
 # MVXTYPE 的逐 lane foreach 循环，半开区间为 [2261:2, 2328:1)。
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
-start_line = 2179
+start_line = 2306
 start_column = 2
-end_line = 2246
+end_line = 2373
 end_column = 1

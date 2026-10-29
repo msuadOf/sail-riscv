@@ -13,9 +13,9 @@ on_limit_reached = "concretize"
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 282
+start_line = 284
 start_column = 2
-end_line = 284
+end_line = 286
 end_column = 24
 
 # VX_VSADDU 逐 lane mask/saturation 分支；60 秒基线累计 31 次 fork。
@@ -69,9 +69,9 @@ end_column = 5
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 612
+start_line = 655
 start_column = 2
-end_line = 634
+end_line = 677
 end_column = 1
 
 # get_fixed_rounding_incr 的 0b11 arm 会判断被丢弃位是否非零。正式运行在
@@ -84,9 +84,9 @@ max_forks_per_region = 1
 sample_bias = 4294967295
 sample_bias_direction = "fallthrough"
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 625
+start_line = 668
 start_column = 28
-end_line = 625
+end_line = 668
 end_column = 72
 
 # sticky_below_rounding 的 IR 在 vxrm=01 arm 中以 `jump sticky_below_rounding`
@@ -97,9 +97,9 @@ max_forks_per_region = 1
 sample_bias = 4294967295
 sample_bias_direction = "jump"
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 624
+start_line = 667
 start_column = 11
-end_line = 624
+end_line = 667
 end_column = 59
 
 # vxrm=01 arm 的短路 AND 在 IR 中是 `jump (rounding_bit == 1)` 后才计算
@@ -111,7 +111,7 @@ max_forks_per_region = 1
 sample_bias = 4294967295
 sample_bias_direction = "jump"
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 628
+start_line = 671
 start_column = 26
-end_line = 628
+end_line = 671
 end_column = 91
