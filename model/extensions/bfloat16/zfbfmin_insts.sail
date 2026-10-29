@@ -53,5 +53,18 @@ function clause execute FCVT_S_BF16(rs1, rm, rd) = {
   RETIRE_SUCCESS
 }
 
+// GNU/Clang共同支持的标准助记符省略舍入参数，编码rm=0。
+// 其他rm仍保留模型原有语义，以字段形式输出，避免汇编时静默改为rm=0。
+mapping bf16_widening_encoding_rm : rounding_mode <-> string = {
+  RM_RTZ <-> "1",
+  RM_RDN <-> "2",
+  RM_RUP <-> "3",
+  RM_RMM <-> "4",
+  RM_DYN <-> "7",
+}
+
+mapping clause assembly = FCVT_S_BF16(rs1, RM_RNE, rd)
+  <-> "fcvt.s.bf16" ^ spc() ^ freg_name(rd) ^ sep() ^ freg_name(rs1)
+
 mapping clause assembly = FCVT_S_BF16(rs1, rm, rd)
-  <-> "fcvt.s.bf16" ^ spc() ^ freg_name(rd) ^ sep() ^ freg_name(rs1) ^ sep() ^ frm_mnemonic(rm)
+  <-> ".insn r 0x53, " ^ bf16_widening_encoding_rm(rm) ^ ", 0x20, " ^ freg_name(rd) ^ sep() ^ freg_name(rs1) ^ ", x6"

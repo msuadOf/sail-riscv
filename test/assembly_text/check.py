@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""检查实际 Sail 汇编映射、FLI 立即数双向往返及 LLVM 编码。"""
+"""检查实际Sail汇编映射、FLI往返及GCC/Clang编码。"""
 
 import argparse
 import hashlib
@@ -13,6 +13,9 @@ ROOT = Path(__file__).resolve().parents[2]
 MODEL = ROOT / "model"
 SOURCES = {
     "zfa": MODEL / "extensions/FD/zfa_insts.sail",
+    "scalar": MODEL / "extensions/bfloat16/zfbfmin_insts.sail",
+    "rounding": MODEL / "extensions/FD/fext_insts.sail",
+    "types": MODEL / "extensions/FD/freg_type.sail",
     "convert": MODEL / "extensions/bfloat16/zvfbfmin_insts.sail",
     "macc": MODEL / "extensions/bfloat16/zvfbfwma_insts.sail",
     "fregs": MODEL / "extensions/FD/fdext_regs.sail",
@@ -79,6 +82,13 @@ def cases():
                 "assembly": f"vfwmaccbf16.{suffix.lower()} v16, {reg}8, v4{mask}",
                 "encoding": 0x3b << 26 | vm << 25 | 4 << 20 | 8 << 15 | function << 12 | 16 << 7 | 0x57,
             })
+    for rm, value in [("RNE", 0), ("RTZ", 1), ("RDN", 2), ("RUP", 3), ("RMM", 4), ("DYN", 7)]:
+        for ctor, mnemonic, funct7, rs2 in [("FCVT_BF16_S", "fcvt.bf16.s", 0x22, 8), ("FCVT_S_BF16", "fcvt.s.bf16", 0x20, 6)]:
+            text = f"{mnemonic} f16, f4, {rm.lower()}"
+            if ctor == "FCVT_S_BF16":
+                text = "fcvt.s.bf16 f16, f4" if value == 0 else f".insn r 0x53, {value}, 0x20, f16, f4, x6"
+            result.append({"ctor": f"{ctor}(Fregidx(0b00100), RM_{rm}, Fregidx(0b10000))",
+                           "assembly": text, "encoding": funct7 << 25 | rs2 << 20 | 4 << 15 | value << 12 | 16 << 7 | 0x53})
     return result
 
 
@@ -87,6 +97,10 @@ def probe_source(source_text, test_cases):
         "union fregidx = { Fregidx : bits(5) }\n",
         "union vregidx = { Vregidx : bits(5) }\n",
     ]
+    parts.append(definition(source_text["types"], r"^enum rounding_mode ="))
+    parts.append(definition(source_text["rounding"], r"^mapping frm_mnemonic :"))
+    if "mapping bf16_widening_encoding_rm" in source_text["scalar"]:
+        parts.append(definition(source_text["scalar"], r"^mapping bf16_widening_encoding_rm :"))
     for name in ["freg_abi_name_raw", "freg_arch_name_raw", "freg_name"]:
         parts.append(definition(source_text["fregs"], rf"^mapping {name} :"))
     for name in ["vreg_name_raw", "vreg_name"]:
@@ -97,12 +111,13 @@ def probe_source(source_text, test_cases):
     parts += ["scattered union instruction\n", "val assembly : instruction <-> string\nscattered mapping assembly\n"]
     for key, ctors in [
         ("zfa", ["FLI_H", "FLI_S", "FLI_D"]),
+        ("scalar", ["FCVT_BF16_S", "FCVT_S_BF16"]),
         ("convert", ["VFNCVTBF16_F_F_W", "VFWCVTBF16_F_F_V"]),
         ("macc", ["VFWMACCBF16_VV", "VFWMACCBF16_VF"]),
     ]:
         for ctor in ctors:
             parts.append(definition(source_text[key], rf"^union clause instruction = {ctor} :"))
-            parts.append(definition(source_text[key], rf"^mapping clause assembly = {ctor}\("))
+            parts.extend(match.group(0) for match in re.finditer(rf"^mapping clause assembly = {ctor}\([^\n]*\n(?:[^\n]+\n)*", source_text[key], re.M))
     parts += ["end instruction\nend assembly\n", """
 function check_case(ins : instruction, label : string) -> unit = {
   let text : string = assembly(ins);
@@ -158,6 +173,24 @@ def main():
     llvm = assemble_texts(printed)
     (output / "llvm.log").write_text(llvm.stdout + llvm.stderr)
     failures = []
+    expected_bytes = b"".join(case["encoding"].to_bytes(4, "little") for case in test_cases)
+    (output / "actual.s").write_text(".text\n.option norelax\n" + actual_asm)
+    toolchains = {}
+    for name, command in [("gcc", ["riscv64-unknown-elf-gcc", "-march=rv64gcv_zfh_zfa", "-Wa,-march=rv64gcv_zfh_zfa_zfbfmin_zvfbfmin_zvfbfwma"]),
+                          ("clang", ["clang", "--target=riscv64-unknown-elf", "-march=rv64gcv_zfh_zfa_zfbfmin_zvfbfmin_zvfbfwma"])]:
+        obj = output / (name + ".o")
+        cmd = command + ["-mabi=lp64d", "-c", str(output / "actual.s"), "-o", str(obj)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        (output / (name + ".log")).write_text(result.stdout + result.stderr)
+        actual = None
+        if result.returncode == 0:
+            raw = output / (name + ".bin")
+            run(["riscv64-unknown-elf-objcopy", "-O", "binary", "-j", ".text", str(obj), str(raw)], output, output / (name + "-objcopy.log"))
+            actual = raw.read_bytes()
+        toolchains[name] = {"command": cmd, "exit": result.returncode, "bytes_match": actual == expected_bytes,
+                            "version": subprocess.check_output([command[0], "--version"], text=True).splitlines()[0]}
+        if actual != expected_bytes:
+            failures.append({"toolchain": name, "exit": result.returncode, "bytes_match": False})
     for index, (actual, case) in enumerate(zip(printed, test_cases)):
         if actual != case["assembly"]:
             failures.append({"index": index, "actual": actual, "expected": case["assembly"]})
@@ -168,14 +201,14 @@ def main():
                 failures.append({"index": index, "encoding": hex(actual), "expected": hex(case["encoding"])})
     else:
         failures.append({"llvm_returncode": llvm.returncode, "encoded_cases": len(encoded)})
-    summary = {"cases": len(test_cases), "sail_forward": len(printed),
+    summary = {"toolchains": toolchains, "cases": len(test_cases), "sail_forward": len(printed),
                "sail_fli_roundtrip": 32 if "mapping fli_constant_mnemonic" in source_text["zfa"] else 0,
                "failures": failures,
                "source_sha256": {key: hashlib.sha256(text.encode()).hexdigest() for key, text in source_text.items()}}
     (output / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n")
     if failures:
         raise AssertionError(f"汇编回归失败 {len(failures)} 项；见 {output / 'summary.json'}")
-    print(f"PASS: {len(test_cases)} 个 Sail assembly 输出、标准文本及 LLVM 编码；32 个 FLI 立即数双向往返")
+    print(f"PASS: {len(test_cases)} 个 Sail assembly 输出、GCC/Clang及LLVM编码；32 个 FLI 立即数双向往返")
 
 
 if __name__ == "__main__":
