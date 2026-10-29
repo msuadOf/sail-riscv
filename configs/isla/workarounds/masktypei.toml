@@ -18,12 +18,12 @@ on_limit_reached = "concretize"
 # fork；循环之外的合法 vtype、vl、vstart 域及指令编码分支仍保持符号执行。
 #
 # Region 是半开区间 [start, end)：
-# Sail start 1367:    if i < start_element then {
-# Sail end   1377:    }
+# Sail start 1361:        if i < start_element then {
+# Sail end   1371:        }
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
-start_line = 1367
+start_line = 1361
 start_column = 4
-end_line = 1377
+end_line = 1371
 end_column = 5

@@ -13,9 +13,9 @@ max_forks_per_region = 1
 sample_bias = 16
 sample_bias_direction = "jump"
 file = "extensions/V/vext_arith_insts.sail"
-start_line = 837
+start_line = 834
 start_column = 2
-end_line = 842
+end_line = 839
 end_column = 1
 
 [execution_limits.case_quota]
@@ -25,7 +25,7 @@ Illegal_Instruction = 2
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
-start_line = 857
+start_line = 854
 start_column = 2
-end_line = 876
+end_line = 873
 end_column = 1
