@@ -47,7 +47,7 @@ function nan_box(n, x) = ones('m - 'n) @ x
 // TODO: Use right-open interval when available. See https://github.com/rems-project/sail/issues/471
 val nan_unbox : forall 'n 'm, 'm in {16, 32, 64, 128} & 'n >= 'm . (implicit('m), bits('n)) -> bits('m)
 function nan_unbox(m, x) = if 'n == 'm then x else (
-  ite(eq_anything(x['n - 1 .. 'm], ones()), x['m - 1 .. 0], canonical_NaN())
+  if x['n - 1 .. 'm] == ones() then x['m - 1 .. 0] else canonical_NaN()
 )
 
 // ***************************************************************
