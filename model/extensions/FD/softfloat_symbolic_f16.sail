@@ -10,42 +10,42 @@ function riscv_f16Add(rm_bits : bits_rm, a : bits_H, b : bits_H) -> (bits_fflags
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let result = fp16_add(rm, fp16_from_ieee(a), fp16_from_ieee(b));
   let exceptions = ieee_add16_exceptions(rm, a, b, result);
-  (riscv_pack_ieee_flags(exceptions), ite(fp16_is_nan(result), riscv_canonical_nan16(), fp16_to_ieee(result)))
+  (riscv_pack_ieee_flags(exceptions), (if fp16_is_nan(result) then riscv_canonical_nan16() else fp16_to_ieee(result)))
 }
 
 function riscv_f16Sub(rm_bits : bits_rm, a : bits_H, b : bits_H) -> (bits_fflags, bits_H) = {
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let result = fp16_sub(rm, fp16_from_ieee(a), fp16_from_ieee(b));
   let exceptions = ieee_sub16_exceptions(rm, a, b, result);
-  (riscv_pack_ieee_flags(exceptions), ite(fp16_is_nan(result), riscv_canonical_nan16(), fp16_to_ieee(result)))
+  (riscv_pack_ieee_flags(exceptions), (if fp16_is_nan(result) then riscv_canonical_nan16() else fp16_to_ieee(result)))
 }
 
 function riscv_f16Mul(rm_bits : bits_rm, a : bits_H, b : bits_H) -> (bits_fflags, bits_H) = {
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let result = fp16_mul(rm, fp16_from_ieee(a), fp16_from_ieee(b));
   let exceptions = ieee_mul16_exceptions(rm, a, b, result);
-  (riscv_pack_ieee_flags(exceptions), ite(fp16_is_nan(result), riscv_canonical_nan16(), fp16_to_ieee(result)))
+  (riscv_pack_ieee_flags(exceptions), (if fp16_is_nan(result) then riscv_canonical_nan16() else fp16_to_ieee(result)))
 }
 
 function riscv_f16Div(rm_bits : bits_rm, a : bits_H, b : bits_H) -> (bits_fflags, bits_H) = {
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let result = fp16_div(rm, fp16_from_ieee(a), fp16_from_ieee(b));
   let exceptions = ieee_div16_exceptions(rm, a, b, result);
-  (riscv_pack_ieee_flags(exceptions), ite(fp16_is_nan(result), riscv_canonical_nan16(), fp16_to_ieee(result)))
+  (riscv_pack_ieee_flags(exceptions), (if fp16_is_nan(result) then riscv_canonical_nan16() else fp16_to_ieee(result)))
 }
 
 function riscv_f16MulAdd(rm_bits : bits_rm, a : bits_H, b : bits_H, c : bits_H) -> (bits_fflags, bits_H) = {
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let result = fp16_fma(rm, fp16_from_ieee(a), fp16_from_ieee(b), fp16_from_ieee(c));
   let exceptions = ieee_fma16_exceptions(rm, a, b, c, result);
-  (riscv_pack_ieee_flags(exceptions), ite(fp16_is_nan(result), riscv_canonical_nan16(), fp16_to_ieee(result)))
+  (riscv_pack_ieee_flags(exceptions), (if fp16_is_nan(result) then riscv_canonical_nan16() else fp16_to_ieee(result)))
 }
 
 function riscv_f16Sqrt(rm_bits : bits_rm, a : bits_H) -> (bits_fflags, bits_H) = {
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let result = fp16_sqrt(rm, fp16_from_ieee(a));
   let exceptions = ieee_sqrt16_exceptions(rm, a, result);
-  (riscv_pack_ieee_flags(exceptions), ite(fp16_is_nan(result), riscv_canonical_nan16(), fp16_to_ieee(result)))
+  (riscv_pack_ieee_flags(exceptions), (if fp16_is_nan(result) then riscv_canonical_nan16() else fp16_to_ieee(result)))
 }
 
 function riscv_f16ToI32(rm_bits : bits_rm, a : bits_H) -> (bits_fflags, bits_W) = {
@@ -120,21 +120,21 @@ function riscv_f16roundToInt(rm_bits : bits_rm, a : bits_H, raise_inexact : bool
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let result = fp16_round_to_integral(rm, fp16_from_ieee(a));
   let exceptions = ieee_round16_exceptions(a, result, raise_inexact);
-  (riscv_pack_ieee_flags(exceptions), ite(fp16_is_nan(result), riscv_canonical_nan16(), fp16_to_ieee(result)))
+  (riscv_pack_ieee_flags(exceptions), (if fp16_is_nan(result) then riscv_canonical_nan16() else fp16_to_ieee(result)))
 }
 
 function riscv_f16ToF32(rm_bits : bits_rm, a : bits_H) -> (bits_fflags, bits_S) = {
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let result = fp16_to_fp32(rm, fp16_from_ieee(a));
   let exceptions = ieee_widen16_to_32_exceptions(a);
-  (riscv_pack_ieee_flags(exceptions), ite(ieee_is_nan(a), riscv_canonical_nan32(), fp32_to_ieee(result)))
+  (riscv_pack_ieee_flags(exceptions), (if ieee_is_nan(a) then riscv_canonical_nan32() else fp32_to_ieee(result)))
 }
 
 function riscv_f16ToF64(rm_bits : bits_rm, a : bits_H) -> (bits_fflags, bits_D) = {
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let result = fp16_to_fp64(rm, fp16_from_ieee(a));
   let exceptions = ieee_widen16_to_64_exceptions(a);
-  (riscv_pack_ieee_flags(exceptions), ite(ieee_is_nan(a), riscv_canonical_nan64(), fp64_to_ieee(result)))
+  (riscv_pack_ieee_flags(exceptions), (if ieee_is_nan(a) then riscv_canonical_nan64() else fp64_to_ieee(result)))
 }
 
 function riscv_f16Lt(a : bits_H, b : bits_H) -> (bits_fflags, bool) = {

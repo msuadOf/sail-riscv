@@ -167,7 +167,7 @@ function riscv_f32ToF64(rm_bits : bits_rm, a : bits_S) -> (bits_fflags, bits_D) 
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let result = fp32_to_fp64(rm, fp32_from_ieee(a));
   let exceptions = ieee_widen32_to_64_exceptions(a);
-  let bits = ite(fp64_is_nan(result), riscv_canonical_nan64(), fp64_to_ieee(result));
+  let bits = (if fp64_is_nan(result) then riscv_canonical_nan64() else fp64_to_ieee(result));
   (riscv_pack_ieee_flags(exceptions), bits)
 }
 
@@ -177,8 +177,8 @@ function riscv_f32ToF16(rm_bits : bits_rm, a : bits_S) -> (bits_fflags, bits_H) 
   let result = fp32_to_fp16(rm, fp32_from_ieee(a));
   let exceptions = ieee_convert32_to_16_exceptions(rm, a, result);
   let (rod_exceptions, rod_bits) = ieee_rod32_to_16(a);
-  let normal_bits = ite(fp16_is_nan(result), riscv_canonical_nan16(), fp16_to_ieee(result));
-  let result_bits = ite(rm_bits == 0b110, ite(ieee_is_nan(a), riscv_canonical_nan16(), rod_bits), normal_bits);
+  let normal_bits = (if fp16_is_nan(result) then riscv_canonical_nan16() else fp16_to_ieee(result));
+  let result_bits = ite(rm_bits == 0b110, (if ieee_is_nan(a) then riscv_canonical_nan16() else rod_bits), normal_bits);
   let flags = ite(rm_bits == 0b110, riscv_pack_ieee_flags(rod_exceptions), riscv_pack_ieee_flags(exceptions));
   (flags, result_bits)
 }
@@ -187,6 +187,6 @@ function riscv_f32ToBF16(rm_bits : bits_rm, a : bits_S) -> (bits_fflags, bits_BF
   let rm = riscv_valid_rm_to_ieee(rm_bits);
   let raw = fp32_to_bf16(rm, fp32_from_ieee(a));
   let exceptions = ieee_bf16_from_f32_exceptions(rm, a, raw);
-  (riscv_pack_ieee_flags(exceptions), ite(ieee_is_nan(a), riscv_canonical_nan_bf16(), raw))
+  (riscv_pack_ieee_flags(exceptions), (if ieee_is_nan(a) then riscv_canonical_nan_bf16() else raw))
 }
 
