@@ -59,15 +59,17 @@ function clause execute RFVVTYPE(funct6, vm, vs2, vs1, vd) = {
   var sum : bits('m) = read_single_element(SEW, 0, vs1);
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem_vs - 1)) {
-    let (operation_flags, candidate) : (bits_fflags, bits('m)) = match funct6 {
-      // Ordered and unordered sums retain the existing lane order.
-      FVV_VFREDOSUM => fp_add_pure(rm_3b, sum, vs2_val[i]),
-      FVV_VFREDUSUM => fp_add_pure(rm_3b, sum, vs2_val[i]),
-      FVV_VFREDMAX  => fp_max_pure(sum, vs2_val[i]),
-      FVV_VFREDMIN  => fp_min_pure(sum, vs2_val[i]),
-    };
-    combined_flags = combined_flags | ite(mask[i] == 0b1, operation_flags, 0b00000);
-    sum = ite(mask[i] == 0b1, candidate, sum)
+    if mask[i] == 0b1 then {
+      let (operation_flags, candidate) : (bits_fflags, bits('m)) = match funct6 {
+        // Ordered and unordered sums retain the existing lane order.
+        FVV_VFREDOSUM => fp_add_pure(rm_3b, sum, vs2_val[i]),
+        FVV_VFREDUSUM => fp_add_pure(rm_3b, sum, vs2_val[i]),
+        FVV_VFREDMAX  => fp_max_pure(sum, vs2_val[i]),
+        FVV_VFREDMIN  => fp_min_pure(sum, vs2_val[i]),
+      };
+      combined_flags = combined_flags | operation_flags;
+      sum = candidate
+    }
   };
   accrue_fflags(combined_flags);
 

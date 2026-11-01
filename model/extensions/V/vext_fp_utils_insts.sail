@@ -15,10 +15,12 @@
 // 2. Valid floating-point rounding mode
 function valid_fp_op(SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
   // SEW=8 is valid for conversions between INT8 and FP16(vfncvt[.rtz].x[u].f.w, etc.)
-  let valid_sew = strict_and_bool(SEW >= 8, SEW <= 64);
-  let valid_rm = not_bool(strict_or_bool(eq_anything(rm_3b, 0b101),
-                     strict_or_bool(eq_anything(rm_3b, 0b110), eq_anything(rm_3b, 0b111))));
-  strict_and_bool(valid_sew, valid_rm)
+  if SEW < 8 then false
+  else if SEW > 64 then false
+  else if eq_anything(rm_3b, 0b101) then false
+  else if eq_anything(rm_3b, 0b110) then false
+  else if eq_anything(rm_3b, 0b111) then false
+  else true
 }
 
 // Ordinary vector FP instructions have no SEW=8 encoding. Widening and
@@ -28,9 +30,10 @@ function valid_fp_standard_op(SEW : sew_bitsize, rm_3b : bits(3)) -> bool =
 
 // a. Normal check for floating-point instructions
 function illegal_fp_normal(vd : vregidx, vm : bits(1), SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
-  strict_or_bool(not_bool(valid_vtype()),
-                 strict_or_bool(not_bool(valid_rd_mask(vd, vm)),
-                                not_bool(valid_fp_standard_op(SEW, rm_3b))))
+  if not_bool(valid_vtype()) then true
+  else if not_bool(valid_rd_mask(vd, vm)) then true
+  else if not_bool(valid_fp_standard_op(SEW, rm_3b)) then true
+  else false
 }
 
 // b. Masked check for floating-point instructions encoded with vm = 0
@@ -57,9 +60,10 @@ function illegal_fp_standard_variable_width(vd : vregidx, vm : bits(1), SEW : se
 // e. Normal check for floating-point reduction instructions
 function illegal_fp_reduction(SEW : sew_bitsize, rm_3b : bits(3)) -> bool = {
   // Reductions have no SEW=8 encoding, but still check RM independently.
-  strict_or_bool(not_bool(valid_vtype()),
-                 strict_or_bool(not_bool(eq_anything(vstart, zeros())),
-                                not_bool(valid_fp_standard_op(SEW, rm_3b))))
+  if not_bool(valid_vtype()) then true
+  else if not_bool(eq_anything(vstart, zeros())) then true
+  else if not_bool(valid_fp_standard_op(SEW, rm_3b)) then true
+  else false
 }
 
 // f. Variable width check for floating-point widening reduction instructions
@@ -307,16 +311,19 @@ function fp_class_onehot_pure(raw) = {
   let zero = strict_and_bool(exp_zero, mant_zero);
   let sub = strict_and_bool(exp_zero, not_bool(mant_zero));
   let normal = strict_and_bool(not_bool(exp_zero), not_bool(exp_ones));
-  isla_bool_to_bit(qnan) @
-  isla_bool_to_bit(snan) @
-  isla_bool_to_bit(strict_and_bool(positive, inf)) @
-  isla_bool_to_bit(strict_and_bool(positive, normal)) @
-  isla_bool_to_bit(strict_and_bool(positive, sub)) @
-  isla_bool_to_bit(strict_and_bool(positive, zero)) @
-  isla_bool_to_bit(strict_and_bool(negative, zero)) @
-  isla_bool_to_bit(strict_and_bool(negative, sub)) @
-  isla_bool_to_bit(strict_and_bool(negative, normal)) @
-  isla_bool_to_bit(strict_and_bool(negative, inf))
+  if qnan then 0b1000000000
+  else if snan then 0b0100000000
+  else if positive then {
+    if inf then 0b0010000000
+    else if normal then 0b0001000000
+    else if sub then 0b0000100000
+    else 0b0000010000
+  } else {
+    if zero then 0b0000001000
+    else if sub then 0b0000000100
+    else if normal then 0b0000000010
+    else 0b0000000001
+  }
 }
 $endif
 

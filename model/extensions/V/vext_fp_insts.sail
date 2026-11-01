@@ -62,10 +62,10 @@ function clause execute FVVTYPE(funct6, vm, vs2, vs1, vd) = {
   };
   var result = initial_result;
 
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (operation_flags, lane_value) : (bits_fflags, bits('m)) = match funct6 {
+    if mask[i] == 0b1 then {
+      let (operation_flags, lane_value) : (bits_fflags, bits('m)) = match funct6 {
         FVV_VADD         => fp_add_pure(rm_3b, vs2_val[i], vs1_val[i]),
         FVV_VSUB         => fp_sub_pure(rm_3b, vs2_val[i], vs1_val[i]),
         FVV_VMIN         => fp_min_pure(vs2_val[i], vs1_val[i]),
@@ -75,11 +75,11 @@ function clause execute FVVTYPE(funct6, vm, vs2, vs1, vd) = {
         FVV_VSGNJ        => (0b00000, [vs1_val[i]['m - 1]] @ vs2_val[i][('m - 2)..0]),
         FVV_VSGNJN       => (0b00000, (0b1 ^ [vs1_val[i]['m - 1]]) @ vs2_val[i][('m - 2)..0]),
         FVV_VSGNJX       => (0b00000, ([vs2_val[i]['m - 1]] ^ [vs1_val[i]['m - 1]]) @ vs2_val[i][('m - 2)..0])
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, operation_flags, 0b00000)
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | operation_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
