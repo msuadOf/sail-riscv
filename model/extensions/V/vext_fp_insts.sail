@@ -203,23 +203,23 @@ function clause execute FVVMATYPE(funct6, vm, vs2, vs1, vd) = {
   };
   var result = initial_result;
 
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (operation_flags, lane_value) : (bits_fflags, bits('m)) = match funct6 {
-        FVV_VMACC        => fp_muladd_pure(rm_3b, vs1_val[i], vs2_val[i], vd_val[i]),
-        FVV_VNMACC       => fp_nmulsub_pure(rm_3b, vs1_val[i], vs2_val[i], vd_val[i]),
-        FVV_VMSAC        => fp_mulsub_pure(rm_3b, vs1_val[i], vs2_val[i], vd_val[i]),
-        FVV_VNMSAC       => fp_nmuladd_pure(rm_3b, vs1_val[i], vs2_val[i], vd_val[i]),
-        FVV_VMADD        => fp_muladd_pure(rm_3b, vs1_val[i], vd_val[i], vs2_val[i]),
-        FVV_VNMADD       => fp_nmulsub_pure(rm_3b, vs1_val[i], vd_val[i], vs2_val[i]),
-        FVV_VMSUB        => fp_mulsub_pure(rm_3b, vs1_val[i], vd_val[i], vs2_val[i]),
-        FVV_VNMSUB       => fp_nmuladd_pure(rm_3b, vs1_val[i], vd_val[i], vs2_val[i])
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, operation_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (operation_flags, lane_value) : (bits_fflags, bits('m)) = match funct6 {
+          FVV_VMACC        => fp_muladd_pure(rm_3b, vs1_val[i], vs2_val[i], vd_val[i]),
+          FVV_VNMACC       => fp_nmulsub_pure(rm_3b, vs1_val[i], vs2_val[i], vd_val[i]),
+          FVV_VMSAC        => fp_mulsub_pure(rm_3b, vs1_val[i], vs2_val[i], vd_val[i]),
+          FVV_VNMSAC       => fp_nmuladd_pure(rm_3b, vs1_val[i], vs2_val[i], vd_val[i]),
+          FVV_VMADD        => fp_muladd_pure(rm_3b, vs1_val[i], vd_val[i], vs2_val[i]),
+          FVV_VNMADD       => fp_nmulsub_pure(rm_3b, vs1_val[i], vd_val[i], vs2_val[i]),
+          FVV_VMSUB        => fp_mulsub_pure(rm_3b, vs1_val[i], vd_val[i], vs2_val[i]),
+          FVV_VNMSUB       => fp_nmuladd_pure(rm_3b, vs1_val[i], vd_val[i], vs2_val[i])
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | operation_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -338,20 +338,20 @@ function clause execute FWVVTYPE(funct6, vm, vs2, vs1, vd) = {
   };
   var result = initial_result;
 
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (vs2_flags, vs2_wide) = fp_widen_pure(rm_3b, vs2_val[i]);
-    let (vs1_flags, vs1_wide) = fp_widen_pure(rm_3b, vs1_val[i]);
-    let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
-        FWVV_VADD        => fp_add_pure(rm_3b, vs2_wide, vs1_wide),
-        FWVV_VSUB        => fp_sub_pure(rm_3b, vs2_wide, vs1_wide),
-        FWVV_VMUL        => fp_mul_pure(rm_3b, vs2_wide, vs1_wide)
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, vs2_flags | vs1_flags | operation_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (vs2_flags, vs2_wide) = fp_widen_pure(rm_3b, vs2_val[i]);
+      let (vs1_flags, vs1_wide) = fp_widen_pure(rm_3b, vs1_val[i]);
+      let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
+          FWVV_VADD        => fp_add_pure(rm_3b, vs2_wide, vs1_wide),
+          FWVV_VSUB        => fp_sub_pure(rm_3b, vs2_wide, vs1_wide),
+          FWVV_VMUL        => fp_mul_pure(rm_3b, vs2_wide, vs1_wide)
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | vs2_flags | vs1_flags | operation_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -466,21 +466,21 @@ function clause execute FWVVMATYPE(funct6, vm, vs1, vs2, vd) = {
   };
   var result = initial_result;
 
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (vs1_flags, vs1_wide) = fp_widen_pure(rm_3b, vs1_val[i]);
-    let (vs2_flags, vs2_wide) = fp_widen_pure(rm_3b, vs2_val[i]);
-    let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
-        FWVV_VMACC       => fp_muladd_pure(rm_3b, vs1_wide, vs2_wide, vd_val[i]),
-        FWVV_VNMACC      => fp_nmulsub_pure(rm_3b, vs1_wide, vs2_wide, vd_val[i]),
-        FWVV_VMSAC       => fp_mulsub_pure(rm_3b, vs1_wide, vs2_wide, vd_val[i]),
-        FWVV_VNMSAC      => fp_nmuladd_pure(rm_3b, vs1_wide, vs2_wide, vd_val[i])
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, vs1_flags | vs2_flags | operation_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (vs1_flags, vs1_wide) = fp_widen_pure(rm_3b, vs1_val[i]);
+      let (vs2_flags, vs2_wide) = fp_widen_pure(rm_3b, vs2_val[i]);
+      let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
+          FWVV_VMACC       => fp_muladd_pure(rm_3b, vs1_wide, vs2_wide, vd_val[i]),
+          FWVV_VNMACC      => fp_nmulsub_pure(rm_3b, vs1_wide, vs2_wide, vd_val[i]),
+          FWVV_VMSAC       => fp_mulsub_pure(rm_3b, vs1_wide, vs2_wide, vd_val[i]),
+          FWVV_VNMSAC      => fp_nmuladd_pure(rm_3b, vs1_wide, vs2_wide, vd_val[i])
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | vs1_flags | vs2_flags | operation_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -594,18 +594,18 @@ function clause execute FWVTYPE(funct6, vm, vs2, vs1, vd) = {
   };
   var result = initial_result;
 
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (vs1_flags, vs1_wide) = fp_widen_pure(rm_3b, vs1_val[i]);
-    let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
-        FWV_VADD         => fp_add_pure(rm_3b, vs2_val[i], vs1_wide),
-        FWV_VSUB         => fp_sub_pure(rm_3b, vs2_val[i], vs1_wide)
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, vs1_flags | operation_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (vs1_flags, vs1_wide) = fp_widen_pure(rm_3b, vs1_val[i]);
+      let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
+          FWV_VADD         => fp_add_pure(rm_3b, vs2_val[i], vs1_wide),
+          FWV_VSUB         => fp_sub_pure(rm_3b, vs2_val[i], vs1_wide)
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | vs1_flags | operation_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -741,63 +741,63 @@ function clause execute VFUNARY0(vm, vs2, vfunary0, vd) = {
   };
   var result = initial_result;
 
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (lane_flags, lane_value) : (bits_fflags, bits('m)) = match vfunary0 {
-        FV_CVT_XU_F      => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                16 => riscv_f16ToUi16_pure(rm_3b, vs2_val[i]),
-                                32 => riscv_f32ToUi32(rm_3b, vs2_val[i]),
-                                64 => riscv_f64ToUi64(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FV_CVT_X_F       => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                16 => riscv_f16ToI16_pure(rm_3b, vs2_val[i]),
-                                32 => riscv_f32ToI32(rm_3b, vs2_val[i]),
-                                64 => riscv_f64ToI64(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FV_CVT_F_XU      => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                16 => riscv_ui32ToF16(rm_3b, zero_extend(vs2_val[i])),
-                                32 => riscv_ui32ToF32(rm_3b, vs2_val[i]),
-                                64 => riscv_ui64ToF64(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FV_CVT_F_X       => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                16 => riscv_i32ToF16(rm_3b, sign_extend(vs2_val[i])),
-                                32 => riscv_i32ToF32(rm_3b, vs2_val[i]),
-                                64 => riscv_i64ToF64(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FV_CVT_RTZ_XU_F  => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                16 => riscv_f16ToUi16_pure(0b001, vs2_val[i]),
-                                32 => riscv_f32ToUi32(0b001, vs2_val[i]),
-                                64 => riscv_f64ToUi64(0b001, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FV_CVT_RTZ_X_F   => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                16 => riscv_f16ToI16_pure(0b001, vs2_val[i]),
-                                32 => riscv_f32ToI32(0b001, vs2_val[i]),
-                                64 => riscv_f64ToI64(0b001, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            }
-      };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, lane_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (lane_flags, lane_value) : (bits_fflags, bits('m)) = match vfunary0 {
+          FV_CVT_XU_F      => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  16 => riscv_f16ToUi16_pure(rm_3b, vs2_val[i]),
+                                  32 => riscv_f32ToUi32(rm_3b, vs2_val[i]),
+                                  64 => riscv_f64ToUi64(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FV_CVT_X_F       => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  16 => riscv_f16ToI16_pure(rm_3b, vs2_val[i]),
+                                  32 => riscv_f32ToI32(rm_3b, vs2_val[i]),
+                                  64 => riscv_f64ToI64(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FV_CVT_F_XU      => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  16 => riscv_ui32ToF16(rm_3b, zero_extend(vs2_val[i])),
+                                  32 => riscv_ui32ToF32(rm_3b, vs2_val[i]),
+                                  64 => riscv_ui64ToF64(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FV_CVT_F_X       => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  16 => riscv_i32ToF16(rm_3b, sign_extend(vs2_val[i])),
+                                  32 => riscv_i32ToF32(rm_3b, vs2_val[i]),
+                                  64 => riscv_i64ToF64(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FV_CVT_RTZ_XU_F  => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  16 => riscv_f16ToUi16_pure(0b001, vs2_val[i]),
+                                  32 => riscv_f32ToUi32(0b001, vs2_val[i]),
+                                  64 => riscv_f64ToUi64(0b001, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FV_CVT_RTZ_X_F   => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  16 => riscv_f16ToI16_pure(0b001, vs2_val[i]),
+                                  32 => riscv_f32ToI32(0b001, vs2_val[i]),
+                                  64 => riscv_f64ToI64(0b001, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              }
+        };
+      result[i] = lane_value;
+      combined_flags = combined_flags | lane_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -1060,71 +1060,71 @@ function clause execute VFWUNARY0(vm, vs2, vfwunary0, vd) = {
     }
   };
   } else {
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (lane_flags, lane_value) : (bits_fflags, bits('o)) = match vfwunary0 {
-        FWV_CVT_XU_F     => {
-                              let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
-                                8  => (0b00000, zeros()),
-                                16 => riscv_f16ToUi32(rm_3b, vs2_val[i]),
-                                32 => riscv_f32ToUi64(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FWV_CVT_X_F      => {
-                              let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
-                                8  => (0b00000, zeros()),
-                                16 => riscv_f16ToI32(rm_3b, vs2_val[i]),
-                                32 => riscv_f32ToI64(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FWV_CVT_F_XU     => {
-                              let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
-                                8  => riscv_ui32ToF16(rm_3b, zero_extend(vs2_val[i])),
-                                16 => riscv_ui32ToF32(rm_3b, zero_extend(vs2_val[i])),
-                                32 => riscv_ui32ToF64(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FWV_CVT_F_X      => {
-                              let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
-                                8  => riscv_i32ToF16(rm_3b, sign_extend(vs2_val[i])),
-                                16 => riscv_i32ToF32(rm_3b, sign_extend(vs2_val[i])),
-                                32 => riscv_i32ToF64(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FWV_CVT_F_F      => {
-                              let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
-                                8  => (0b00000, zeros()),
-                                16 => riscv_f16ToF32(rm_3b, vs2_val[i]),
-                                32 => riscv_f32ToF64(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FWV_CVT_RTZ_XU_F => {
-                              let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
-                                8  => (0b00000, zeros()),
-                                16 => riscv_f16ToUi32(0b001, vs2_val[i]),
-                                32 => riscv_f32ToUi64(0b001, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FWV_CVT_RTZ_X_F  => {
-                              let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
-                                8  => (0b00000, zeros()),
-                                16 => riscv_f16ToI32(0b001, vs2_val[i]),
-                                32 => riscv_f32ToI64(0b001, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            }
-      };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, lane_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (lane_flags, lane_value) : (bits_fflags, bits('o)) = match vfwunary0 {
+          FWV_CVT_XU_F     => {
+                                let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
+                                  8  => (0b00000, zeros()),
+                                  16 => riscv_f16ToUi32(rm_3b, vs2_val[i]),
+                                  32 => riscv_f32ToUi64(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FWV_CVT_X_F      => {
+                                let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
+                                  8  => (0b00000, zeros()),
+                                  16 => riscv_f16ToI32(rm_3b, vs2_val[i]),
+                                  32 => riscv_f32ToI64(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FWV_CVT_F_XU     => {
+                                let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
+                                  8  => riscv_ui32ToF16(rm_3b, zero_extend(vs2_val[i])),
+                                  16 => riscv_ui32ToF32(rm_3b, zero_extend(vs2_val[i])),
+                                  32 => riscv_ui32ToF64(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FWV_CVT_F_X      => {
+                                let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
+                                  8  => riscv_i32ToF16(rm_3b, sign_extend(vs2_val[i])),
+                                  16 => riscv_i32ToF32(rm_3b, sign_extend(vs2_val[i])),
+                                  32 => riscv_i32ToF64(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FWV_CVT_F_F      => {
+                                let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
+                                  8  => (0b00000, zeros()),
+                                  16 => riscv_f16ToF32(rm_3b, vs2_val[i]),
+                                  32 => riscv_f32ToF64(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FWV_CVT_RTZ_XU_F => {
+                                let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
+                                  8  => (0b00000, zeros()),
+                                  16 => riscv_f16ToUi32(0b001, vs2_val[i]),
+                                  32 => riscv_f32ToUi64(0b001, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FWV_CVT_RTZ_X_F  => {
+                                let (fflags, elem) : (bits_fflags, bits('o)) = match 'm {
+                                  8  => (0b00000, zeros()),
+                                  16 => riscv_f16ToI32(0b001, vs2_val[i]),
+                                  32 => riscv_f32ToI64(0b001, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              }
+        };
+      result[i] = lane_value;
+      combined_flags = combined_flags | lane_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
   };
 
@@ -1413,79 +1413,79 @@ function clause execute VFNUNARY0(vm, vs2, vfnunary0, vd) = {
     }
   };
   } else {
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (lane_flags, lane_value) : (bits_fflags, bits('m)) = match vfnunary0 {
-        FNV_CVT_XU_F     => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                8  => riscv_f16ToUi8_pure(rm_3b, vs2_val[i]),
-                                16 => riscv_f32ToUi16_pure(rm_3b, vs2_val[i]),
-                                32 => riscv_f64ToUi32(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FNV_CVT_X_F      => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                8  => riscv_f16ToI8_pure(rm_3b, vs2_val[i]),
-                                16 => riscv_f32ToI16_pure(rm_3b, vs2_val[i]),
-                                32 => riscv_f64ToI32(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FNV_CVT_F_XU     => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                8  => (0b00000, zeros()),
-                                16 => riscv_ui32ToF16(rm_3b, vs2_val[i]),
-                                32 => riscv_ui64ToF32(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FNV_CVT_F_X      => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                8  => (0b00000, zeros()),
-                                16 => riscv_i32ToF16(rm_3b, vs2_val[i]),
-                                32 => riscv_i64ToF32(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FNV_CVT_F_F      => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                8  => (0b00000, zeros()),
-                                16 => riscv_f32ToF16(rm_3b, vs2_val[i]),
-                                32 => riscv_f64ToF32(rm_3b, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FNV_CVT_ROD_F_F  => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                8  => (0b00000, zeros()),
-                                16 => riscv_f32ToF16(0b110, vs2_val[i]),
-                                32 => riscv_f64ToF32(0b110, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FNV_CVT_RTZ_XU_F => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                8  => riscv_f16ToUi8_pure(0b001, vs2_val[i]),
-                                16 => riscv_f32ToUi16_pure(0b001, vs2_val[i]),
-                                32 => riscv_f64ToUi32(0b001, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            },
-        FNV_CVT_RTZ_X_F  => {
-                              let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
-                                8  => riscv_f16ToI8_pure(0b001, vs2_val[i]),
-                                16 => riscv_f32ToI16_pure(0b001, vs2_val[i]),
-                                32 => riscv_f64ToI32(0b001, vs2_val[i])
-                              };
-                              (fflags, elem)
-                            }
-      };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, lane_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (lane_flags, lane_value) : (bits_fflags, bits('m)) = match vfnunary0 {
+          FNV_CVT_XU_F     => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  8  => riscv_f16ToUi8_pure(rm_3b, vs2_val[i]),
+                                  16 => riscv_f32ToUi16_pure(rm_3b, vs2_val[i]),
+                                  32 => riscv_f64ToUi32(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FNV_CVT_X_F      => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  8  => riscv_f16ToI8_pure(rm_3b, vs2_val[i]),
+                                  16 => riscv_f32ToI16_pure(rm_3b, vs2_val[i]),
+                                  32 => riscv_f64ToI32(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FNV_CVT_F_XU     => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  8  => (0b00000, zeros()),
+                                  16 => riscv_ui32ToF16(rm_3b, vs2_val[i]),
+                                  32 => riscv_ui64ToF32(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FNV_CVT_F_X      => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  8  => (0b00000, zeros()),
+                                  16 => riscv_i32ToF16(rm_3b, vs2_val[i]),
+                                  32 => riscv_i64ToF32(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FNV_CVT_F_F      => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  8  => (0b00000, zeros()),
+                                  16 => riscv_f32ToF16(rm_3b, vs2_val[i]),
+                                  32 => riscv_f64ToF32(rm_3b, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FNV_CVT_ROD_F_F  => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  8  => (0b00000, zeros()),
+                                  16 => riscv_f32ToF16(0b110, vs2_val[i]),
+                                  32 => riscv_f64ToF32(0b110, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FNV_CVT_RTZ_XU_F => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  8  => riscv_f16ToUi8_pure(0b001, vs2_val[i]),
+                                  16 => riscv_f32ToUi16_pure(0b001, vs2_val[i]),
+                                  32 => riscv_f64ToUi32(0b001, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              },
+          FNV_CVT_RTZ_X_F  => {
+                                let (fflags, elem) : (bits_fflags, bits('m)) = match 'm {
+                                  8  => riscv_f16ToI8_pure(0b001, vs2_val[i]),
+                                  16 => riscv_f32ToI16_pure(0b001, vs2_val[i]),
+                                  32 => riscv_f64ToI32(0b001, vs2_val[i])
+                                };
+                                (fflags, elem)
+                              }
+        };
+      result[i] = lane_value;
+      combined_flags = combined_flags | lane_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
   };
 
@@ -1725,23 +1725,23 @@ function clause execute VFUNARY1(vm, vs2, vfunary1, vd) = {
     }
   };
   } else {
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (lane_flags, lane_value) : (bits_fflags, bits('m)) = match vfunary1 {
-      FVV_VSQRT => match 'm {
-        16 => riscv_f16Sqrt(rm_3b, vs2_val[i]),
-        32 => riscv_f32Sqrt(rm_3b, vs2_val[i]),
-        64 => riscv_f64Sqrt(rm_3b, vs2_val[i])
-      },
-      FVV_VCLASS => (0b00000, zero_extend(fp_class_onehot_pure(vs2_val[i]))),
-      FVV_VRSQRT7 => (0b00000, initial_result[i]),
-      FVV_VREC7 => (0b00000, initial_result[i])
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, lane_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (lane_flags, lane_value) : (bits_fflags, bits('m)) = match vfunary1 {
+        FVV_VSQRT => match 'm {
+          16 => riscv_f16Sqrt(rm_3b, vs2_val[i]),
+          32 => riscv_f32Sqrt(rm_3b, vs2_val[i]),
+          64 => riscv_f64Sqrt(rm_3b, vs2_val[i])
+        },
+        FVV_VCLASS => (0b00000, zero_extend(fp_class_onehot_pure(vs2_val[i]))),
+        FVV_VRSQRT7 => (0b00000, initial_result[i]),
+        FVV_VREC7 => (0b00000, initial_result[i])
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | lane_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
   };
 
@@ -1950,28 +1950,28 @@ function clause execute FVFTYPE(funct6, vm, vs2, rs1, vd) = {
     }
   };
   } else {
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (operation_flags, lane_value) : (bits_fflags, bits('m)) = match funct6 {
-        VF_VADD          => fp_add_pure(rm_3b, vs2_val[i], rs1_val),
-        VF_VSUB          => fp_sub_pure(rm_3b, vs2_val[i], rs1_val),
-        VF_VRSUB         => fp_sub_pure(rm_3b, rs1_val, vs2_val[i]),
-        VF_VMIN          => fp_min_pure(vs2_val[i], rs1_val),
-        VF_VMAX          => fp_max_pure(vs2_val[i], rs1_val),
-        VF_VMUL          => fp_mul_pure(rm_3b, vs2_val[i], rs1_val),
-        VF_VDIV          => fp_div_pure(rm_3b, vs2_val[i], rs1_val),
-        VF_VRDIV         => fp_div_pure(rm_3b, rs1_val, vs2_val[i]),
-        VF_VSGNJ         => (0b00000, [rs1_val['m - 1]] @ vs2_val[i][('m - 2)..0]),
-        VF_VSGNJN        => (0b00000, (0b1 ^ [rs1_val['m - 1]]) @ vs2_val[i][('m - 2)..0]),
-        VF_VSGNJX        => (0b00000, ([vs2_val[i]['m - 1]] ^ [rs1_val['m - 1]]) @ vs2_val[i][('m - 2)..0]),
-        VF_VSLIDE1UP     => (0b00000, initial_result[i]),
-        VF_VSLIDE1DOWN   => (0b00000, initial_result[i])
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, operation_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (operation_flags, lane_value) : (bits_fflags, bits('m)) = match funct6 {
+          VF_VADD          => fp_add_pure(rm_3b, vs2_val[i], rs1_val),
+          VF_VSUB          => fp_sub_pure(rm_3b, vs2_val[i], rs1_val),
+          VF_VRSUB         => fp_sub_pure(rm_3b, rs1_val, vs2_val[i]),
+          VF_VMIN          => fp_min_pure(vs2_val[i], rs1_val),
+          VF_VMAX          => fp_max_pure(vs2_val[i], rs1_val),
+          VF_VMUL          => fp_mul_pure(rm_3b, vs2_val[i], rs1_val),
+          VF_VDIV          => fp_div_pure(rm_3b, vs2_val[i], rs1_val),
+          VF_VRDIV         => fp_div_pure(rm_3b, rs1_val, vs2_val[i]),
+          VF_VSGNJ         => (0b00000, [rs1_val['m - 1]] @ vs2_val[i][('m - 2)..0]),
+          VF_VSGNJN        => (0b00000, (0b1 ^ [rs1_val['m - 1]]) @ vs2_val[i][('m - 2)..0]),
+          VF_VSGNJX        => (0b00000, ([vs2_val[i]['m - 1]] ^ [rs1_val['m - 1]]) @ vs2_val[i][('m - 2)..0]),
+          VF_VSLIDE1UP     => (0b00000, initial_result[i]),
+          VF_VSLIDE1DOWN   => (0b00000, initial_result[i])
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | operation_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
   };
 
@@ -2114,23 +2114,23 @@ function clause execute FVFMATYPE(funct6, vm, vs2, rs1, vd) = {
   };
   var result = initial_result;
 
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (operation_flags, lane_value) : (bits_fflags, bits('m)) = match funct6 {
-        VF_VMACC         => fp_muladd_pure(rm_3b, rs1_val, vs2_val[i], vd_val[i]),
-        VF_VNMACC        => fp_nmulsub_pure(rm_3b, rs1_val, vs2_val[i], vd_val[i]),
-        VF_VMSAC         => fp_mulsub_pure(rm_3b, rs1_val, vs2_val[i], vd_val[i]),
-        VF_VNMSAC        => fp_nmuladd_pure(rm_3b, rs1_val, vs2_val[i], vd_val[i]),
-        VF_VMADD         => fp_muladd_pure(rm_3b, rs1_val, vd_val[i], vs2_val[i]),
-        VF_VNMADD        => fp_nmulsub_pure(rm_3b, rs1_val, vd_val[i], vs2_val[i]),
-        VF_VMSUB         => fp_mulsub_pure(rm_3b, rs1_val, vd_val[i], vs2_val[i]),
-        VF_VNMSUB        => fp_nmuladd_pure(rm_3b, rs1_val, vd_val[i], vs2_val[i])
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, operation_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (operation_flags, lane_value) : (bits_fflags, bits('m)) = match funct6 {
+          VF_VMACC         => fp_muladd_pure(rm_3b, rs1_val, vs2_val[i], vd_val[i]),
+          VF_VNMACC        => fp_nmulsub_pure(rm_3b, rs1_val, vs2_val[i], vd_val[i]),
+          VF_VMSAC         => fp_mulsub_pure(rm_3b, rs1_val, vs2_val[i], vd_val[i]),
+          VF_VNMSAC        => fp_nmuladd_pure(rm_3b, rs1_val, vs2_val[i], vd_val[i]),
+          VF_VMADD         => fp_muladd_pure(rm_3b, rs1_val, vd_val[i], vs2_val[i]),
+          VF_VNMADD        => fp_nmulsub_pure(rm_3b, rs1_val, vd_val[i], vs2_val[i]),
+          VF_VMSUB         => fp_mulsub_pure(rm_3b, rs1_val, vd_val[i], vs2_val[i]),
+          VF_VNMSUB        => fp_nmuladd_pure(rm_3b, rs1_val, vd_val[i], vs2_val[i])
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | operation_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -2247,20 +2247,20 @@ function clause execute FWVFTYPE(funct6, vm, vs2, rs1, vd) = {
   };
   var result = initial_result;
 
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (vs2_flags, vs2_wide) = fp_widen_pure(rm_3b, vs2_val[i]);
-    let (rs1_flags, rs1_wide) = fp_widen_pure(rm_3b, rs1_val);
-    let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
-        FWVF_VADD        => fp_add_pure(rm_3b, vs2_wide, rs1_wide),
-        FWVF_VSUB        => fp_sub_pure(rm_3b, vs2_wide, rs1_wide),
-        FWVF_VMUL        => fp_mul_pure(rm_3b, vs2_wide, rs1_wide)
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, vs2_flags | rs1_flags | operation_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (vs2_flags, vs2_wide) = fp_widen_pure(rm_3b, vs2_val[i]);
+      let (rs1_flags, rs1_wide) = fp_widen_pure(rm_3b, rs1_val);
+      let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
+          FWVF_VADD        => fp_add_pure(rm_3b, vs2_wide, rs1_wide),
+          FWVF_VSUB        => fp_sub_pure(rm_3b, vs2_wide, rs1_wide),
+          FWVF_VMUL        => fp_mul_pure(rm_3b, vs2_wide, rs1_wide)
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | vs2_flags | rs1_flags | operation_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -2373,21 +2373,21 @@ function clause execute FWVFMATYPE(funct6, vm, rs1, vs2, vd) = {
   };
   var result = initial_result;
 
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (rs1_flags, rs1_wide) = fp_widen_pure(rm_3b, rs1_val);
-    let (vs2_flags, vs2_wide) = fp_widen_pure(rm_3b, vs2_val[i]);
-    let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
-        FWVF_VMACC       => fp_muladd_pure(rm_3b, rs1_wide, vs2_wide, vd_val[i]),
-        FWVF_VNMACC      => fp_nmulsub_pure(rm_3b, rs1_wide, vs2_wide, vd_val[i]),
-        FWVF_VMSAC       => fp_mulsub_pure(rm_3b, rs1_wide, vs2_wide, vd_val[i]),
-        FWVF_VNMSAC      => fp_nmuladd_pure(rm_3b, rs1_wide, vs2_wide, vd_val[i])
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, rs1_flags | vs2_flags | operation_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (rs1_flags, rs1_wide) = fp_widen_pure(rm_3b, rs1_val);
+      let (vs2_flags, vs2_wide) = fp_widen_pure(rm_3b, vs2_val[i]);
+      let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
+          FWVF_VMACC       => fp_muladd_pure(rm_3b, rs1_wide, vs2_wide, vd_val[i]),
+          FWVF_VNMACC      => fp_nmulsub_pure(rm_3b, rs1_wide, vs2_wide, vd_val[i]),
+          FWVF_VMSAC       => fp_mulsub_pure(rm_3b, rs1_wide, vs2_wide, vd_val[i]),
+          FWVF_VNMSAC      => fp_nmuladd_pure(rm_3b, rs1_wide, vs2_wide, vd_val[i])
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | rs1_flags | vs2_flags | operation_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -2500,18 +2500,18 @@ function clause execute FWFTYPE(funct6, vm, vs2, rs1, vd) = {
   };
   var result = initial_result;
 
-  var candidates = initial_result;
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (rs1_flags, rs1_wide) = fp_widen_pure(rm_3b, rs1_val);
-    let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
-        FWF_VADD         => fp_add_pure(rm_3b, vs2_val[i], rs1_wide),
-        FWF_VSUB         => fp_sub_pure(rm_3b, vs2_val[i], rs1_wide)
-    };
-    candidates[i] = lane_value;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, rs1_flags | operation_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (rs1_flags, rs1_wide) = fp_widen_pure(rm_3b, rs1_val);
+      let (operation_flags, lane_value) : (bits_fflags, bits('o)) = match funct6 {
+          FWF_VADD         => fp_add_pure(rm_3b, vs2_val[i], rs1_wide),
+          FWF_VSUB         => fp_sub_pure(rm_3b, vs2_val[i], rs1_wide)
+      };
+      result[i] = lane_value;
+      combined_flags = combined_flags | rs1_flags | operation_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, candidates);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);

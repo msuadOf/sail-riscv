@@ -192,10 +192,12 @@ function clause execute RFWVVTYPE(_funct6, vm, vs2, vs1, vd) = {
   var sum : bits('o) = read_single_element(SEW_widen, 0, vs1);
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem_vs - 1)) {
-    let (widen_flags, wide_src) = fp_widen_pure(rm_3b, vs2_val[i]);
-    let (operation_flags, candidate) = fp_add_pure(rm_3b, sum, wide_src);
-    combined_flags = combined_flags | ite(mask[i] == 0b1, widen_flags | operation_flags, 0b00000);
-    sum = ite(mask[i] == 0b1, candidate, sum)
+    if mask[i] == 0b1 then {
+      let (widen_flags, wide_src) = fp_widen_pure(rm_3b, vs2_val[i]);
+      let (operation_flags, candidate) = fp_add_pure(rm_3b, sum, wide_src);
+      combined_flags = combined_flags | widen_flags | operation_flags;
+      sum = candidate
+    }
   };
   accrue_fflags(combined_flags);
 

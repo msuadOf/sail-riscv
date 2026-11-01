@@ -58,14 +58,16 @@ function clause execute FVVMTYPE(funct6, vm, vs2, vs1, vd) = {
 
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (lane_flags, lane_value) : (bits_fflags, bool) = match funct6 {
-        FVVM_VMFEQ       => fp_eq_pure(vs2_val[i], vs1_val[i]),
-        FVVM_VMFNE       => fp_ne_pure(vs2_val[i], vs1_val[i]),
-        FVVM_VMFLE       => fp_le_pure(vs2_val[i], vs1_val[i]),
-        FVVM_VMFLT       => fp_lt_pure(vs2_val[i], vs1_val[i])
-    };
-    result[i] = masked_select(mask[i], isla_bool_to_bit(lane_value), initial_result[i]);
-    combined_flags = combined_flags | ite(mask[i] == 0b1, lane_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (lane_flags, lane_value) : (bits_fflags, bool) = match funct6 {
+          FVVM_VMFEQ       => fp_eq_pure(vs2_val[i], vs1_val[i]),
+          FVVM_VMFNE       => fp_ne_pure(vs2_val[i], vs1_val[i]),
+          FVVM_VMFLE       => fp_le_pure(vs2_val[i], vs1_val[i]),
+          FVVM_VMFLT       => fp_lt_pure(vs2_val[i], vs1_val[i])
+      };
+      result[i] = isla_bool_to_bit(lane_value);
+      combined_flags = combined_flags | lane_flags
+    }
   };
   accrue_fflags(combined_flags);
 
@@ -178,16 +180,18 @@ function clause execute FVFMTYPE(funct6, vm, vs2, rs1, vd) = {
 
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (lane_flags, lane_value) : (bits_fflags, bool) = match funct6 {
-        VFM_VMFEQ        => fp_eq_pure(vs2_val[i], rs1_val),
-        VFM_VMFNE        => fp_ne_pure(vs2_val[i], rs1_val),
-        VFM_VMFLE        => fp_le_pure(vs2_val[i], rs1_val),
-        VFM_VMFLT        => fp_lt_pure(vs2_val[i], rs1_val),
-        VFM_VMFGE        => fp_ge_pure(vs2_val[i], rs1_val),
-        VFM_VMFGT        => fp_gt_pure(vs2_val[i], rs1_val)
-    };
-    result[i] = masked_select(mask[i], isla_bool_to_bit(lane_value), initial_result[i]);
-    combined_flags = combined_flags | ite(mask[i] == 0b1, lane_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (lane_flags, lane_value) : (bits_fflags, bool) = match funct6 {
+          VFM_VMFEQ        => fp_eq_pure(vs2_val[i], rs1_val),
+          VFM_VMFNE        => fp_ne_pure(vs2_val[i], rs1_val),
+          VFM_VMFLE        => fp_le_pure(vs2_val[i], rs1_val),
+          VFM_VMFLT        => fp_lt_pure(vs2_val[i], rs1_val),
+          VFM_VMFGE        => fp_ge_pure(vs2_val[i], rs1_val),
+          VFM_VMFGT        => fp_gt_pure(vs2_val[i], rs1_val)
+      };
+      result[i] = isla_bool_to_bit(lane_value);
+      combined_flags = combined_flags | lane_flags
+    }
   };
   accrue_fflags(combined_flags);
 
