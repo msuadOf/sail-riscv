@@ -48,11 +48,12 @@ function clause execute (VFNCVTBF16_F_F_W(vm, vs2, vd)) = {
 
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (lane_flags, elem) = riscv_f32ToBF16(rm_3b, vs2_val[i]);
-    result[i] = elem;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, lane_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (lane_flags, elem) = riscv_f32ToBF16(rm_3b, vs2_val[i]);
+      result[i] = elem;
+      combined_flags = combined_flags | lane_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, result);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
@@ -147,11 +148,12 @@ function clause execute (VFWCVTBF16_F_F_V(vm, vs2, vd)) = {
 
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (lane_flags, elem) = bf16_to_f32(vs2_val[i]);
-    result[i] = elem;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, lane_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (lane_flags, elem) = bf16_to_f32(vs2_val[i]);
+      result[i] = elem;
+      combined_flags = combined_flags | lane_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, result);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);

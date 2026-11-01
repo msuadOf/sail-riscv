@@ -15,7 +15,10 @@ function bf16_to_f32 (v : bits(16)) -> (bits_fflags, bits(32)) = {
   let (sign, exp, mant) = fsplit_BF16(v);
   let is_nan = strict_and_bool(eq_anything(exp, ones()), not_bool(eq_anything(mant, zeros())));
   let is_snan = strict_and_bool(is_nan, eq_anything(mant[6], 0b0));
-  (ite(is_snan, nvFlag(), zeros()), ite(is_nan, canonical_NaN_S(), v @ zeros(16)))
+  if is_nan then {
+    if is_snan then (nvFlag(), canonical_NaN_S())
+    else (zeros(), canonical_NaN_S())
+  } else (zeros(), v @ zeros(16))
 }
 $else
 function bf16_to_f32 (v : bits(16)) -> (bits_fflags, bits(32)) = {

@@ -50,14 +50,15 @@ function clause execute VFWMACCBF16_VV(vm, vs2, vs1, vd) = {
 
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (vs2_flags, vs2_elem) = bf16_to_f32(vs2_val[i]);
-    let (vs1_flags, vs1_elem) = bf16_to_f32(vs1_val[i]);
-    let (op_flags, elem) = riscv_f32MulAdd(rm_3b, vs2_elem, vs1_elem, vd_val[i]);
-    result[i] = elem;
-    let lane_flags = vs2_flags | vs1_flags | op_flags;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, lane_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (vs2_flags, vs2_elem) = bf16_to_f32(vs2_val[i]);
+      let (vs1_flags, vs1_elem) = bf16_to_f32(vs1_val[i]);
+      let (op_flags, elem) = riscv_f32MulAdd(rm_3b, vs2_elem, vs1_elem, vd_val[i]);
+      result[i] = elem;
+      let lane_flags = vs2_flags | vs1_flags | op_flags;
+      combined_flags = combined_flags | lane_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, result);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
@@ -151,16 +152,17 @@ function clause execute VFWMACCBF16_VF(vm, vs2, rs1, vd) = {
   };
   var result = initial_result;
 
-  let (rs1_fflags, rs1_val) = bf16_to_f32(F_BF16(rs1));
   var combined_flags : bits_fflags = 0b00000;
   foreach (i from 0 to (num_elem - 1)) {
-    let (vs2_flags, vs2_elem) = bf16_to_f32(vs2_val[i]);
-    let (op_flags, elem) = riscv_f32MulAdd(rm_3b, vs2_elem, rs1_val, vd_val[i]);
-    result[i] = elem;
-    let lane_flags = rs1_fflags | vs2_flags | op_flags;
-    combined_flags = combined_flags | ite(mask[i] == 0b1, lane_flags, 0b00000)
+    if mask[i] == 0b1 then {
+      let (rs1_fflags, rs1_val) = bf16_to_f32(F_BF16(rs1));
+      let (vs2_flags, vs2_elem) = bf16_to_f32(vs2_val[i]);
+      let (op_flags, elem) = riscv_f32MulAdd(rm_3b, vs2_elem, rs1_val, vd_val[i]);
+      result[i] = elem;
+      let lane_flags = rs1_fflags | vs2_flags | op_flags;
+      combined_flags = combined_flags | lane_flags
+    }
   };
-  result = vector_select_masked(mask, initial_result, result);
   accrue_fflags(combined_flags);
 
   write_vreg(num_elem, SEW_widen, LMUL_pow_widen, vd, result);
