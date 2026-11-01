@@ -7,7 +7,7 @@
 
 
 function riscv_f32_symbolic_bits(value : float32) -> bits_S =
-  ite(fp32_is_nan(value), riscv_canonical_nan32(), fp32_to_ieee(value))
+  if fp32_is_nan(value) then riscv_canonical_nan32() else fp32_to_ieee(value)
 
 // ROD is a derived narrowing operation; its unused ordinary candidate must
 // still use the native RTZ rounding mode rather than an illegal RM encoding.
