@@ -542,13 +542,13 @@ function riscv_f32ToUi16(rm : bits_rm, v : bits_S) -> (bits_fflags, bits(16)) = 
 }
 
 $ifdef SYMBOLIC
-// The narrow integer adapters keep the original saturation rule while using
-// bitvector ITEs, so an inactive lane never forks on its converted value.
+// The f16-to-i16 adapter branches on overflow after the active-lane gate.
+// Other narrow integer adapters retain their bitvector ITE saturation rules.
 function riscv_f16ToI16_pure(rm : bits_rm, v : bits_H) -> (bits_fflags, bits(16)) = {
   let (flag, sig32) = riscv_f16ToI32(rm, v);
   let overflow = not_bool(eq_anything(sig32, sign_extend(sig32[15 .. 0])));
   let limit = ite(eq_anything(sig32[31], 0b1), 0x8000, 0x7fff);
-  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[15 .. 0]))
+  if overflow then (nvFlag(), limit) else (flag, sig32[15 .. 0])
 }
 
 function riscv_f16ToI8_pure(rm : bits_rm, v : bits_H) -> (bits_fflags, bits(8)) = {
