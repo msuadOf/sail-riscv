@@ -735,6 +735,14 @@ mapping f_un_rm_ff_type_mnemonic_H : f_un_rm_ff_op_H <-> string = {
     FCVT_D_H  <-> "fcvt.d.h",
 }
 
+mapping clause assembly = F_UN_RM_FF_TYPE_H(rs1, RM_RNE, rd, FCVT_S_H)
+                      <-> "fcvt.s.h" ^ spc() ^ freg_or_reg_name(rd)
+                          ^ sep() ^ freg_or_reg_name(rs1)
+
+mapping clause assembly = F_UN_RM_FF_TYPE_H(rs1, RM_RNE, rd, FCVT_D_H)
+                      <-> "fcvt.d.h" ^ spc() ^ freg_or_reg_name(rd)
+                          ^ sep() ^ freg_or_reg_name(rs1)
+
 mapping clause assembly = F_UN_RM_FF_TYPE_H(rs1, rm, rd, op)
                       <-> f_un_rm_ff_type_mnemonic_H(op)
                           ^ spc() ^ freg_or_reg_name(rd)

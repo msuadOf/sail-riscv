@@ -605,6 +605,10 @@ mapping f_un_rm_ff_type_mnemonic_D : f_un_rm_ff_op_D <-> string = {
     FCVT_D_S  <-> "fcvt.d.s"
 }
 
+mapping clause assembly = F_UN_RM_FF_TYPE_D(rs1, RM_RNE, rd, FCVT_D_S)
+                      <-> "fcvt.d.s" ^ spc() ^ freg_or_reg_name(rd)
+                          ^ sep() ^ freg_or_reg_name(rs1)
+
 mapping clause assembly = F_UN_RM_FF_TYPE_D(rs1, rm, rd, op)
                       <-> f_un_rm_ff_type_mnemonic_D(op)
                           ^ spc() ^ freg_or_reg_name(rd)
@@ -630,6 +634,14 @@ mapping f_un_rm_xf_type_mnemonic_D : f_un_rm_xf_op_D <-> string = {
     FCVT_D_L  <-> "fcvt.d.l",
     FCVT_D_LU <-> "fcvt.d.lu",
 }
+
+mapping clause assembly = F_UN_RM_XF_TYPE_D(rs1, RM_RNE, rd, FCVT_D_W)
+                      <-> "fcvt.d.w" ^ spc() ^ freg_or_reg_name(rd)
+                          ^ sep() ^ reg_name(rs1)
+
+mapping clause assembly = F_UN_RM_XF_TYPE_D(rs1, RM_RNE, rd, FCVT_D_WU)
+                      <-> "fcvt.d.wu" ^ spc() ^ freg_or_reg_name(rd)
+                          ^ sep() ^ reg_name(rs1)
 
 mapping clause assembly = F_UN_RM_XF_TYPE_D(rs1, rm, rd, op)
                       <-> f_un_rm_xf_type_mnemonic_D(op)
