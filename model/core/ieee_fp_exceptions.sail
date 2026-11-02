@@ -129,14 +129,7 @@ function ieee_f32_rounded_exceptions(rm : float_rounding_mode, lo : float64, hi 
   let inward_tiny = strict_and_bool(inward, fp64_lt(lower, minimum_normal));
   let tiny = strict_or_bool(nearest_tiny, strict_or_bool(outward_tiny, inward_tiny));
   let underflow = strict_and_bool(inexact, tiny);
-  if overflow then
-    ieee_exception_facts(false, false, true, underflow, inexact)
-  else if underflow then
-    ieee_exception_facts(false, false, false, true, inexact)
-  else if inexact then
-    ieee_exception_facts(false, false, false, false, true)
-  else
-    ieee_empty_exceptions(false)
+  ieee_exception_facts(false, false, overflow, underflow, inexact)
 }
 
 function ieee_add32_exceptions(rm : float_rounding_mode, a : bits(32), b : bits(32), result : float32) -> ieee_fp_exceptions = {
@@ -233,14 +226,7 @@ function ieee_f16_rounded_exceptions(rm : float_rounding_mode, lo : float32, hi 
   let inward_tiny = strict_and_bool(inward, fp32_lt(lower, minimum_normal));
   let tiny = strict_or_bool(nearest_tiny, strict_or_bool(outward_tiny, inward_tiny));
   let underflow = strict_and_bool(inexact, tiny);
-  if overflow then
-    ieee_exception_facts(false, false, true, underflow, inexact)
-  else if underflow then
-    ieee_exception_facts(false, false, false, true, inexact)
-  else if inexact then
-    ieee_exception_facts(false, false, false, false, true)
-  else
-    ieee_empty_exceptions(false)
+  ieee_exception_facts(false, false, overflow, underflow, inexact)
 }
 
 function ieee_add16_exceptions(rm : float_rounding_mode, a : bits(16), b : bits(16), result : float16) -> ieee_fp_exceptions = {
@@ -338,14 +324,7 @@ function ieee_f64_rounded_exceptions(rm : float_rounding_mode, lo : float128, hi
   let inward_tiny = strict_and_bool(inward, fp128_lt(lower, minimum_normal));
   let tiny = strict_or_bool(nearest_tiny, strict_or_bool(outward_tiny, inward_tiny));
   let underflow = strict_and_bool(inexact, tiny);
-  if overflow then
-    ieee_exception_facts(false, false, true, underflow, inexact)
-  else if underflow then
-    ieee_exception_facts(false, false, false, true, inexact)
-  else if inexact then
-    ieee_exception_facts(false, false, false, false, true)
-  else
-    ieee_empty_exceptions(false)
+  ieee_exception_facts(false, false, overflow, underflow, inexact)
 }
 
 function ieee_add64_exceptions(rm : float_rounding_mode, a : bits(64), b : bits(64), result : float64) -> ieee_fp_exceptions = {
@@ -798,14 +777,7 @@ function ieee_exact_threshold_exceptions(
     )
   );
   let underflow = strict_and_bool(inexact, tiny);
-  if overflow then
-    ieee_exception_facts(false, false, true, underflow, inexact)
-  else if underflow then
-    ieee_exception_facts(false, false, false, true, inexact)
-  else if inexact then
-    ieee_exception_facts(false, false, false, false, true)
-  else
-    ieee_empty_exceptions(false)
+  ieee_exception_facts(false, false, overflow, underflow, inexact)
 }
 
 function ieee_f32_bits_as_f128(raw : bits(32)) -> float128 =
@@ -838,18 +810,6 @@ function ieee_exact_bf16_exceptions(rm : float_rounding_mode, x : float128, resu
     ieee_f64_bits_as_f128(0x47efe00000000000), ieee_f64_bits_as_f128(0x47eff00000000000), ieee_f64_bits_as_f128(0x47f0000000000000),
     ieee_f64_bits_as_f128(0x3810000000000000), ieee_f64_bits_as_f128(0x380fe00000000000), ieee_f64_bits_as_f128(0x380ff00000000000))
 
-function ieee_mask_exact_exceptions(invalid : bool, finite : bool, rounded : ieee_fp_exceptions) -> ieee_fp_exceptions =
-  if finite then
-    ieee_exception_facts(
-      invalid,
-      false,
-      ieee_has_overflow(rounded),
-      ieee_has_underflow(rounded),
-      ieee_has_inexact(rounded)
-    )
-  else
-    ieee_empty_exceptions(invalid)
-
 function ieee_fp_to_int_core(x : float128, rounded : float128, finite : bool, is_unsigned : bool, width64 : bool) -> ieee_fp_exceptions = {
   if finite then {
     let lower_signed = ite(width64,
@@ -866,10 +826,7 @@ function ieee_fp_to_int_core(x : float128, rounded : float128, finite : bool, is
     let valid = strict_and_bool(fp128_gteq(rounded, lower), fp128_lt(rounded, upper));
     if valid then {
       let inexact = not_bool(fp128_eq(x, rounded));
-      if inexact then
-        ieee_exception_facts(false, false, false, false, true)
-      else
-        ieee_empty_exceptions(false)
+      ieee_exception_facts(false, false, false, false, inexact)
     } else
       ieee_empty_exceptions(true)
   } else
@@ -882,10 +839,7 @@ function ieee_round16_exceptions(a : bits(16), result : float16, raise_inexact :
   if finite then {
     let x = fp16_from_ieee(a);
     let inexact = strict_and_bool(raise_inexact, not_bool(fp16_eq(x, result)));
-    if inexact then
-      ieee_exception_facts(invalid_nan, false, false, false, true)
-    else
-      ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid_nan, false, false, false, inexact)
   } else
     ieee_empty_exceptions(invalid_nan)
 }
@@ -932,10 +886,7 @@ function ieee_round32_exceptions(a : bits(32), result : float32, raise_inexact :
   if finite then {
     let x = fp32_from_ieee(a);
     let inexact = strict_and_bool(raise_inexact, not_bool(fp32_eq(x, result)));
-    if inexact then
-      ieee_exception_facts(invalid_nan, false, false, false, true)
-    else
-      ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid_nan, false, false, false, inexact)
   } else
     ieee_empty_exceptions(invalid_nan)
 }
@@ -982,10 +933,7 @@ function ieee_round64_exceptions(a : bits(64), result : float64, raise_inexact :
   if finite then {
     let x = fp64_from_ieee(a);
     let inexact = strict_and_bool(raise_inexact, not_bool(fp64_eq(x, result)));
-    if inexact then
-      ieee_exception_facts(invalid_nan, false, false, false, true)
-    else
-      ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid_nan, false, false, false, inexact)
   } else
     ieee_empty_exceptions(invalid_nan)
 }
@@ -1033,7 +981,7 @@ function ieee_convert32_to_16_exceptions(rm : float_rounding_mode, a : bits(32),
     let exact = fp32_to_fp128(round_nearest_ties_to_even(), fp32_from_ieee(a));
     let rounded = fp16_to_fp128(round_nearest_ties_to_even(), result);
     let facts = ieee_exact16_exceptions(rm, exact, rounded);
-    ieee_mask_exact_exceptions(invalid_nan, true, facts)
+    facts
   } else
     ieee_empty_exceptions(invalid_nan)
 }
@@ -1045,7 +993,7 @@ function ieee_convert64_to_16_exceptions(rm : float_rounding_mode, a : bits(64),
     let exact = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
     let rounded = fp16_to_fp128(round_nearest_ties_to_even(), result);
     let facts = ieee_exact16_exceptions(rm, exact, rounded);
-    ieee_mask_exact_exceptions(invalid_nan, true, facts)
+    facts
   } else
     ieee_empty_exceptions(invalid_nan)
 }
@@ -1057,7 +1005,7 @@ function ieee_convert64_to_32_exceptions(rm : float_rounding_mode, a : bits(64),
     let exact = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
     let rounded = fp32_to_fp128(round_nearest_ties_to_even(), result);
     let facts = ieee_exact32_exceptions(rm, exact, rounded);
-    ieee_mask_exact_exceptions(invalid_nan, true, facts)
+    facts
   } else
     ieee_empty_exceptions(invalid_nan)
 }
@@ -1078,7 +1026,7 @@ function ieee_bf16_from_f32_exceptions(rm : float_rounding_mode, a : bits(32), r
     let exact = ieee_f32_bits_as_f128(a);
     let rounded = ieee_f32_bits_as_f128(result_bits @ 0x0000);
     let facts = ieee_exact_bf16_exceptions(rm, exact, rounded);
-    ieee_mask_exact_exceptions(invalid_nan, true, facts)
+    facts
   } else
     ieee_empty_exceptions(invalid_nan)
 }
@@ -1093,12 +1041,9 @@ function ieee_rod32_to_16(a : bits(32)) -> (ieee_fp_exceptions, bits(16)) = {
     let exact = ieee_f32_bits_as_f128(a);
     let rounded = fp16_to_fp128(round_nearest_ties_to_even(), base);
     let facts = ieee_exact16_exceptions(round_toward_zero(), exact, rounded);
-    ieee_mask_exact_exceptions(invalid_nan, true, facts)
+    facts
   } else ieee_empty_exceptions(invalid_nan);
-  if ieee_has_inexact(flags) then
-    (flags, base_bits | 0x0001)
-  else
-    (flags, base_bits)
+  (flags, ite(ieee_has_inexact(flags), base_bits | 0x0001, base_bits))
 }
 
 function ieee_rod64_to_32(a : bits(64)) -> (ieee_fp_exceptions, bits(32)) = {
@@ -1111,11 +1056,8 @@ function ieee_rod64_to_32(a : bits(64)) -> (ieee_fp_exceptions, bits(32)) = {
     let exact = ieee_f64_bits_as_f128(a);
     let rounded = fp32_to_fp128(round_nearest_ties_to_even(), base);
     let facts = ieee_exact32_exceptions(round_toward_zero(), exact, rounded);
-    ieee_mask_exact_exceptions(invalid_nan, true, facts)
+    facts
   } else ieee_empty_exceptions(invalid_nan);
-  if ieee_has_inexact(flags) then
-    (flags, base_bits | 0x00000001)
-  else
-    (flags, base_bits)
+  (flags, ite(ieee_has_inexact(flags), base_bits | 0x00000001, base_bits))
 }
 
