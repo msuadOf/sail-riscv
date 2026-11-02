@@ -544,10 +544,12 @@ function accrue_fflags(flags : bits(5)) -> unit = {
   let f = old | flags;
   let changed = not_bool(eq_anything(old, f));
   fcsr[FFLAGS] = f;
-  assert(strict_or_bool(not_bool(changed), hartSupports(Ext_F) != hartSupports(Ext_Zfinx)));
-  if hartSupports(Ext_F) then {
-    let dirty = [mstatus with FS = extStatus_to_bits(Dirty), SD = 0b1];
-    mstatus.bits = ite(changed, dirty.bits, mstatus.bits);
+  if changed then {
+    assert(hartSupports(Ext_F) != hartSupports(Ext_Zfinx));
+    if hartSupports(Ext_F) then {
+      let dirty = [mstatus with FS = extStatus_to_bits(Dirty), SD = 0b1];
+      mstatus.bits = dirty.bits;
+    };
   };
   csr_write_callback("fflags", zero_extend(fcsr[FFLAGS]));
   csr_write_callback("fcsr", zero_extend(fcsr.bits));
