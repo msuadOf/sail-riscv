@@ -88,12 +88,9 @@ function riscv_f64ToI32(rm : bits_rm, a : bits_D) -> (bits_fflags, bits_W) = {
   let rounded = fp64_round_to_integral(mode, fp64_from_ieee(a));
   let flags = ieee_fp64_to_int_exceptions(a, rounded, false, false);
   let candidate = fp64_to_signed32(round_toward_zero(), rounded);
-  let result = if ieee_has_invalid(flags) then {
-    if ieee_is_nan(a) then 0x7fffffff
-    else if eq_anything(a[63], 0b1) then 0x80000000
-    else 0x7fffffff
-  } else candidate;
-  (riscv_pack_ieee_flags(flags), result)
+  let positive = strict_or_bool(ieee_is_nan(a), eq_anything(a[63], 0b0));
+  let invalid = ite(positive, 0x7fffffff, 0x80000000);
+  (riscv_pack_ieee_flags(flags), ite(ieee_has_invalid(flags), invalid, candidate))
 }
 
 function riscv_f64ToUi32(rm : bits_rm, a : bits_D) -> (bits_fflags, bits_WU) = {
@@ -101,12 +98,9 @@ function riscv_f64ToUi32(rm : bits_rm, a : bits_D) -> (bits_fflags, bits_WU) = {
   let rounded = fp64_round_to_integral(mode, fp64_from_ieee(a));
   let flags = ieee_fp64_to_int_exceptions(a, rounded, true, false);
   let candidate = fp64_to_unsigned32(round_toward_zero(), rounded);
-  let result = if ieee_has_invalid(flags) then {
-    if ieee_is_nan(a) then 0xffffffff
-    else if eq_anything(a[63], 0b1) then 0x00000000
-    else 0xffffffff
-  } else candidate;
-  (riscv_pack_ieee_flags(flags), result)
+  let positive = strict_or_bool(ieee_is_nan(a), eq_anything(a[63], 0b0));
+  let invalid = ite(positive, 0xffffffff, 0x00000000);
+  (riscv_pack_ieee_flags(flags), ite(ieee_has_invalid(flags), invalid, candidate))
 }
 
 function riscv_f64ToI64(rm : bits_rm, a : bits_D) -> (bits_fflags, bits_L) = {
@@ -114,12 +108,9 @@ function riscv_f64ToI64(rm : bits_rm, a : bits_D) -> (bits_fflags, bits_L) = {
   let rounded = fp64_round_to_integral(mode, fp64_from_ieee(a));
   let flags = ieee_fp64_to_int_exceptions(a, rounded, false, true);
   let candidate = fp64_to_signed64(round_toward_zero(), rounded);
-  let result = if ieee_has_invalid(flags) then {
-    if ieee_is_nan(a) then 0x7fffffffffffffff
-    else if eq_anything(a[63], 0b1) then 0x8000000000000000
-    else 0x7fffffffffffffff
-  } else candidate;
-  (riscv_pack_ieee_flags(flags), result)
+  let positive = strict_or_bool(ieee_is_nan(a), eq_anything(a[63], 0b0));
+  let invalid = ite(positive, 0x7fffffffffffffff, 0x8000000000000000);
+  (riscv_pack_ieee_flags(flags), ite(ieee_has_invalid(flags), invalid, candidate))
 }
 
 function riscv_f64ToUi64(rm : bits_rm, a : bits_D) -> (bits_fflags, bits_LU) = {
@@ -127,12 +118,9 @@ function riscv_f64ToUi64(rm : bits_rm, a : bits_D) -> (bits_fflags, bits_LU) = {
   let rounded = fp64_round_to_integral(mode, fp64_from_ieee(a));
   let flags = ieee_fp64_to_int_exceptions(a, rounded, true, true);
   let candidate = fp64_to_unsigned64(round_toward_zero(), rounded);
-  let result = if ieee_has_invalid(flags) then {
-    if ieee_is_nan(a) then 0xffffffffffffffff
-    else if eq_anything(a[63], 0b1) then 0x0000000000000000
-    else 0xffffffffffffffff
-  } else candidate;
-  (riscv_pack_ieee_flags(flags), result)
+  let positive = strict_or_bool(ieee_is_nan(a), eq_anything(a[63], 0b0));
+  let invalid = ite(positive, 0xffffffffffffffff, 0x0000000000000000);
+  (riscv_pack_ieee_flags(flags), ite(ieee_has_invalid(flags), invalid, candidate))
 }
 
 function riscv_i32ToF64(rm : bits_rm, a : bits_W) -> (bits_fflags, bits_D) = {
