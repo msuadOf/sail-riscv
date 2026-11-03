@@ -139,23 +139,22 @@ function ieee_add32_exceptions(rm : float_rounding_mode, a : bits(32), b : bits(
     not_bool(eq_anything(a[31], b[31]))
   );
   let finite = strict_and_bool(ieee_is_finite(a), ieee_is_finite(b));
-  if invalid_inf then
-    ieee_empty_exceptions(true)
-  else if finite then {
+  let invalid = strict_or_bool(invalid_nan, invalid_inf);
+  if finite then {
     let x = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(a));
     let y = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(b));
     let lo = fp64_add(round_toward_negative(), x, y);
     let hi = fp64_add(round_toward_positive(), x, y);
     let rounded = ieee_f32_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_sub32_exceptions(rm : float_rounding_mode, a : bits(32), b : bits(32), result : float32) -> ieee_fp_exceptions = {
@@ -165,23 +164,22 @@ function ieee_sub32_exceptions(rm : float_rounding_mode, a : bits(32), b : bits(
     eq_anything(a[31], b[31])
   );
   let finite = strict_and_bool(ieee_is_finite(a), ieee_is_finite(b));
-  if invalid_inf then
-    ieee_empty_exceptions(true)
-  else if finite then {
+  let invalid = strict_or_bool(invalid_nan, invalid_inf);
+  if finite then {
     let x = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(a));
     let y = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(b));
     let lo = fp64_sub(round_toward_negative(), x, y);
     let hi = fp64_sub(round_toward_positive(), x, y);
     let rounded = ieee_f32_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 function ieee_eq16_exceptions(a : bits(16), b : bits(16)) -> ieee_fp_exceptions = {
   let a_invalid = ieee_operand_invalid(false, a);
@@ -236,23 +234,22 @@ function ieee_add16_exceptions(rm : float_rounding_mode, a : bits(16), b : bits(
     not_bool(eq_anything(a[15], b[15]))
   );
   let finite = strict_and_bool(ieee_is_finite(a), ieee_is_finite(b));
-  if invalid_inf then
-    ieee_empty_exceptions(true)
-  else if finite then {
+  let invalid = strict_or_bool(invalid_nan, invalid_inf);
+  if finite then {
     let x = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(a));
     let y = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(b));
     let lo = fp32_add(round_toward_negative(), x, y);
     let hi = fp32_add(round_toward_positive(), x, y);
     let rounded = ieee_f16_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_sub16_exceptions(rm : float_rounding_mode, a : bits(16), b : bits(16), result : float16) -> ieee_fp_exceptions = {
@@ -262,23 +259,22 @@ function ieee_sub16_exceptions(rm : float_rounding_mode, a : bits(16), b : bits(
     eq_anything(a[15], b[15])
   );
   let finite = strict_and_bool(ieee_is_finite(a), ieee_is_finite(b));
-  if invalid_inf then
-    ieee_empty_exceptions(true)
-  else if finite then {
+  let invalid = strict_or_bool(invalid_nan, invalid_inf);
+  if finite then {
     let x = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(a));
     let y = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(b));
     let lo = fp32_sub(round_toward_negative(), x, y);
     let hi = fp32_sub(round_toward_positive(), x, y);
     let rounded = ieee_f16_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_eq64_exceptions(a : bits(64), b : bits(64)) -> ieee_fp_exceptions = {
@@ -334,23 +330,22 @@ function ieee_add64_exceptions(rm : float_rounding_mode, a : bits(64), b : bits(
     not_bool(eq_anything(a[63], b[63]))
   );
   let finite = strict_and_bool(ieee_is_finite(a), ieee_is_finite(b));
-  if invalid_inf then
-    ieee_empty_exceptions(true)
-  else if finite then {
+  let invalid = strict_or_bool(invalid_nan, invalid_inf);
+  if finite then {
     let x = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
     let y = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(b));
     let lo = fp128_add(round_toward_negative(), x, y);
     let hi = fp128_add(round_toward_positive(), x, y);
     let rounded = ieee_f64_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_sub64_exceptions(rm : float_rounding_mode, a : bits(64), b : bits(64), result : float64) -> ieee_fp_exceptions = {
@@ -360,48 +355,46 @@ function ieee_sub64_exceptions(rm : float_rounding_mode, a : bits(64), b : bits(
     eq_anything(a[63], b[63])
   );
   let finite = strict_and_bool(ieee_is_finite(a), ieee_is_finite(b));
-  if invalid_inf then
-    ieee_empty_exceptions(true)
-  else if finite then {
+  let invalid = strict_or_bool(invalid_nan, invalid_inf);
+  if finite then {
     let x = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
     let y = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(b));
     let lo = fp128_sub(round_toward_negative(), x, y);
     let hi = fp128_sub(round_toward_positive(), x, y);
     let rounded = ieee_f64_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 function ieee_mul16_exceptions(rm : float_rounding_mode, a : bits(16), b : bits(16), result : float16) -> ieee_fp_exceptions = {
   let invalid_nan = strict_or_bool(ieee_operand_invalid(false, a), ieee_operand_invalid(false, b));
-  let invalid_zero_inf_a = strict_and_bool(ieee_is_zero(a), ieee_is_inf(b));
-  let invalid_zero_inf_b = strict_and_bool(ieee_is_inf(a), ieee_is_zero(b));
+  let invalid_zero_inf = strict_or_bool(
+    strict_and_bool(ieee_is_zero(a), ieee_is_inf(b)),
+    strict_and_bool(ieee_is_inf(a), ieee_is_zero(b))
+  );
   let valid = strict_and_bool(ieee_is_finite(a), ieee_is_finite(b));
-  if invalid_zero_inf_a then
-    ieee_empty_exceptions(true)
-  else if invalid_zero_inf_b then
-    ieee_empty_exceptions(true)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, invalid_zero_inf);
+  if valid then {
     let x = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(a));
     let y = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(b));
     let lo = fp32_mul(round_toward_negative(), x, y);
     let hi = fp32_mul(round_toward_positive(), x, y);
     let rounded = ieee_f16_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_div16_exceptions(rm : float_rounding_mode, a : bits(16), b : bits(16), result : float16) -> ieee_fp_exceptions = {
@@ -413,27 +406,22 @@ function ieee_div16_exceptions(rm : float_rounding_mode, a : bits(16), b : bits(
     ieee_is_zero(b)
   );
   let valid = strict_and_bool(strict_and_bool(ieee_is_finite(a), ieee_is_finite(b)), not_bool(ieee_is_zero(b)));
-  if invalid_zero_zero then
-    ieee_empty_exceptions(true)
-  else if invalid_inf_inf then
-    ieee_empty_exceptions(true)
-  else if divide_by_zero then
-    ieee_exception_facts(false, true, false, false, false)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, strict_or_bool(invalid_zero_zero, invalid_inf_inf));
+  if valid then {
     let x = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(a));
     let y = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(b));
     let lo = fp32_div(round_toward_negative(), x, y);
     let hi = fp32_div(round_toward_positive(), x, y);
     let rounded = ieee_f16_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
-      false,
+      invalid,
+      divide_by_zero,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, divide_by_zero, false, false, false)
 }
 
 function ieee_sqrt16_exceptions(rm : float_rounding_mode, a : bits(16), result : float16) -> ieee_fp_exceptions = {
@@ -441,28 +429,29 @@ function ieee_sqrt16_exceptions(rm : float_rounding_mode, a : bits(16), result :
   let invalid_negative = strict_and_bool(not_bool(ieee_is_nan(a)), negative_nonzero);
   let invalid_nan = ieee_operand_invalid(false, a);
   let valid = strict_or_bool(strict_and_bool(ieee_is_finite(a), not_bool(negative_nonzero)), ieee_is_zero(a));
-  if invalid_negative then
-    ieee_empty_exceptions(true)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, invalid_negative);
+  if valid then {
     let x = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(a));
     let lo = fp32_sqrt(round_toward_negative(), x);
     let hi = fp32_sqrt(round_toward_positive(), x);
     let rounded = ieee_f16_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_fma16_exceptions(rm : float_rounding_mode, a : bits(16), b : bits(16), c : bits(16), result : float16) -> ieee_fp_exceptions = {
   let invalid_nan = strict_or_bool(ieee_operand_invalid(false, a), strict_or_bool(ieee_operand_invalid(false, b), ieee_operand_invalid(false, c)));
-  let invalid_zero_inf_a = strict_and_bool(ieee_is_zero(a), ieee_is_inf(b));
-  let invalid_zero_inf_b = strict_and_bool(ieee_is_inf(a), ieee_is_zero(b));
+  let invalid_zero_inf = strict_or_bool(
+    strict_and_bool(ieee_is_zero(a), ieee_is_inf(b)),
+    strict_and_bool(ieee_is_inf(a), ieee_is_zero(b))
+  );
   let valid_inf_product = strict_or_bool(
     strict_and_bool(ieee_is_inf(a), strict_and_bool(not_bool(ieee_is_nan(b)), not_bool(ieee_is_zero(b)))),
     strict_and_bool(ieee_is_inf(b), strict_and_bool(not_bool(ieee_is_nan(a)), not_bool(ieee_is_zero(a))))
@@ -477,13 +466,8 @@ function ieee_fma16_exceptions(rm : float_rounding_mode, a : bits(16), b : bits(
     )
   );
   let valid = strict_and_bool(ieee_is_finite(a), strict_and_bool(ieee_is_finite(b), ieee_is_finite(c)));
-  if invalid_zero_inf_a then
-    ieee_empty_exceptions(true)
-  else if invalid_zero_inf_b then
-    ieee_empty_exceptions(true)
-  else if invalid_inf_cancel then
-    ieee_empty_exceptions(true)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, strict_or_bool(invalid_zero_inf, invalid_inf_cancel));
+  if valid then {
     let x = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(a));
     let y = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(b));
     let z = fp16_to_fp32(round_nearest_ties_to_even(), fp16_from_ieee(c));
@@ -491,40 +475,39 @@ function ieee_fma16_exceptions(rm : float_rounding_mode, a : bits(16), b : bits(
     let hi = fp32_fma(round_toward_positive(), x, y, z);
     let rounded = ieee_f16_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_mul32_exceptions(rm : float_rounding_mode, a : bits(32), b : bits(32), result : float32) -> ieee_fp_exceptions = {
   let invalid_nan = strict_or_bool(ieee_operand_invalid(false, a), ieee_operand_invalid(false, b));
-  let invalid_zero_inf_a = strict_and_bool(ieee_is_zero(a), ieee_is_inf(b));
-  let invalid_zero_inf_b = strict_and_bool(ieee_is_inf(a), ieee_is_zero(b));
+  let invalid_zero_inf = strict_or_bool(
+    strict_and_bool(ieee_is_zero(a), ieee_is_inf(b)),
+    strict_and_bool(ieee_is_inf(a), ieee_is_zero(b))
+  );
   let valid = strict_and_bool(ieee_is_finite(a), ieee_is_finite(b));
-  if invalid_zero_inf_a then
-    ieee_empty_exceptions(true)
-  else if invalid_zero_inf_b then
-    ieee_empty_exceptions(true)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, invalid_zero_inf);
+  if valid then {
     let x = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(a));
     let y = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(b));
     let lo = fp64_mul(round_toward_negative(), x, y);
     let hi = fp64_mul(round_toward_positive(), x, y);
     let rounded = ieee_f32_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_div32_exceptions(rm : float_rounding_mode, a : bits(32), b : bits(32), result : float32) -> ieee_fp_exceptions = {
@@ -536,27 +519,22 @@ function ieee_div32_exceptions(rm : float_rounding_mode, a : bits(32), b : bits(
     ieee_is_zero(b)
   );
   let valid = strict_and_bool(strict_and_bool(ieee_is_finite(a), ieee_is_finite(b)), not_bool(ieee_is_zero(b)));
-  if invalid_zero_zero then
-    ieee_empty_exceptions(true)
-  else if invalid_inf_inf then
-    ieee_empty_exceptions(true)
-  else if divide_by_zero then
-    ieee_exception_facts(false, true, false, false, false)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, strict_or_bool(invalid_zero_zero, invalid_inf_inf));
+  if valid then {
     let x = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(a));
     let y = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(b));
     let lo = fp64_div(round_toward_negative(), x, y);
     let hi = fp64_div(round_toward_positive(), x, y);
     let rounded = ieee_f32_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
-      false,
+      invalid,
+      divide_by_zero,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, divide_by_zero, false, false, false)
 }
 
 function ieee_sqrt32_exceptions(rm : float_rounding_mode, a : bits(32), result : float32) -> ieee_fp_exceptions = {
@@ -564,28 +542,29 @@ function ieee_sqrt32_exceptions(rm : float_rounding_mode, a : bits(32), result :
   let invalid_negative = strict_and_bool(not_bool(ieee_is_nan(a)), negative_nonzero);
   let invalid_nan = ieee_operand_invalid(false, a);
   let valid = strict_or_bool(strict_and_bool(ieee_is_finite(a), not_bool(negative_nonzero)), ieee_is_zero(a));
-  if invalid_negative then
-    ieee_empty_exceptions(true)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, invalid_negative);
+  if valid then {
     let x = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(a));
     let lo = fp64_sqrt(round_toward_negative(), x);
     let hi = fp64_sqrt(round_toward_positive(), x);
     let rounded = ieee_f32_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_fma32_exceptions(rm : float_rounding_mode, a : bits(32), b : bits(32), c : bits(32), result : float32) -> ieee_fp_exceptions = {
   let invalid_nan = strict_or_bool(ieee_operand_invalid(false, a), strict_or_bool(ieee_operand_invalid(false, b), ieee_operand_invalid(false, c)));
-  let invalid_zero_inf_a = strict_and_bool(ieee_is_zero(a), ieee_is_inf(b));
-  let invalid_zero_inf_b = strict_and_bool(ieee_is_inf(a), ieee_is_zero(b));
+  let invalid_zero_inf = strict_or_bool(
+    strict_and_bool(ieee_is_zero(a), ieee_is_inf(b)),
+    strict_and_bool(ieee_is_inf(a), ieee_is_zero(b))
+  );
   let valid_inf_product = strict_or_bool(
     strict_and_bool(ieee_is_inf(a), strict_and_bool(not_bool(ieee_is_nan(b)), not_bool(ieee_is_zero(b)))),
     strict_and_bool(ieee_is_inf(b), strict_and_bool(not_bool(ieee_is_nan(a)), not_bool(ieee_is_zero(a))))
@@ -600,13 +579,8 @@ function ieee_fma32_exceptions(rm : float_rounding_mode, a : bits(32), b : bits(
     )
   );
   let valid = strict_and_bool(ieee_is_finite(a), strict_and_bool(ieee_is_finite(b), ieee_is_finite(c)));
-  if invalid_zero_inf_a then
-    ieee_empty_exceptions(true)
-  else if invalid_zero_inf_b then
-    ieee_empty_exceptions(true)
-  else if invalid_inf_cancel then
-    ieee_empty_exceptions(true)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, strict_or_bool(invalid_zero_inf, invalid_inf_cancel));
+  if valid then {
     let x = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(a));
     let y = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(b));
     let z = fp32_to_fp64(round_nearest_ties_to_even(), fp32_from_ieee(c));
@@ -614,40 +588,39 @@ function ieee_fma32_exceptions(rm : float_rounding_mode, a : bits(32), b : bits(
     let hi = fp64_fma(round_toward_positive(), x, y, z);
     let rounded = ieee_f32_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_mul64_exceptions(rm : float_rounding_mode, a : bits(64), b : bits(64), result : float64) -> ieee_fp_exceptions = {
   let invalid_nan = strict_or_bool(ieee_operand_invalid(false, a), ieee_operand_invalid(false, b));
-  let invalid_zero_inf_a = strict_and_bool(ieee_is_zero(a), ieee_is_inf(b));
-  let invalid_zero_inf_b = strict_and_bool(ieee_is_inf(a), ieee_is_zero(b));
+  let invalid_zero_inf = strict_or_bool(
+    strict_and_bool(ieee_is_zero(a), ieee_is_inf(b)),
+    strict_and_bool(ieee_is_inf(a), ieee_is_zero(b))
+  );
   let valid = strict_and_bool(ieee_is_finite(a), ieee_is_finite(b));
-  if invalid_zero_inf_a then
-    ieee_empty_exceptions(true)
-  else if invalid_zero_inf_b then
-    ieee_empty_exceptions(true)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, invalid_zero_inf);
+  if valid then {
     let x = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
     let y = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(b));
     let lo = fp128_mul(round_toward_negative(), x, y);
     let hi = fp128_mul(round_toward_positive(), x, y);
     let rounded = ieee_f64_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_div64_exceptions(rm : float_rounding_mode, a : bits(64), b : bits(64), result : float64) -> ieee_fp_exceptions = {
@@ -659,27 +632,22 @@ function ieee_div64_exceptions(rm : float_rounding_mode, a : bits(64), b : bits(
     ieee_is_zero(b)
   );
   let valid = strict_and_bool(strict_and_bool(ieee_is_finite(a), ieee_is_finite(b)), not_bool(ieee_is_zero(b)));
-  if invalid_zero_zero then
-    ieee_empty_exceptions(true)
-  else if invalid_inf_inf then
-    ieee_empty_exceptions(true)
-  else if divide_by_zero then
-    ieee_exception_facts(false, true, false, false, false)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, strict_or_bool(invalid_zero_zero, invalid_inf_inf));
+  if valid then {
     let x = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
     let y = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(b));
     let lo = fp128_div(round_toward_negative(), x, y);
     let hi = fp128_div(round_toward_positive(), x, y);
     let rounded = ieee_f64_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
-      false,
+      invalid,
+      divide_by_zero,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, divide_by_zero, false, false, false)
 }
 
 function ieee_sqrt64_exceptions(rm : float_rounding_mode, a : bits(64), result : float64) -> ieee_fp_exceptions = {
@@ -687,28 +655,29 @@ function ieee_sqrt64_exceptions(rm : float_rounding_mode, a : bits(64), result :
   let invalid_negative = strict_and_bool(not_bool(ieee_is_nan(a)), negative_nonzero);
   let invalid_nan = ieee_operand_invalid(false, a);
   let valid = strict_or_bool(strict_and_bool(ieee_is_finite(a), not_bool(negative_nonzero)), ieee_is_zero(a));
-  if invalid_negative then
-    ieee_empty_exceptions(true)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, invalid_negative);
+  if valid then {
     let x = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
     let lo = fp128_sqrt(round_toward_negative(), x);
     let hi = fp128_sqrt(round_toward_positive(), x);
     let rounded = ieee_f64_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 
 function ieee_fma64_exceptions(rm : float_rounding_mode, a : bits(64), b : bits(64), c : bits(64), result : float64) -> ieee_fp_exceptions = {
   let invalid_nan = strict_or_bool(ieee_operand_invalid(false, a), strict_or_bool(ieee_operand_invalid(false, b), ieee_operand_invalid(false, c)));
-  let invalid_zero_inf_a = strict_and_bool(ieee_is_zero(a), ieee_is_inf(b));
-  let invalid_zero_inf_b = strict_and_bool(ieee_is_inf(a), ieee_is_zero(b));
+  let invalid_zero_inf = strict_or_bool(
+    strict_and_bool(ieee_is_zero(a), ieee_is_inf(b)),
+    strict_and_bool(ieee_is_inf(a), ieee_is_zero(b))
+  );
   let valid_inf_product = strict_or_bool(
     strict_and_bool(ieee_is_inf(a), strict_and_bool(not_bool(ieee_is_nan(b)), not_bool(ieee_is_zero(b)))),
     strict_and_bool(ieee_is_inf(b), strict_and_bool(not_bool(ieee_is_nan(a)), not_bool(ieee_is_zero(a))))
@@ -723,13 +692,8 @@ function ieee_fma64_exceptions(rm : float_rounding_mode, a : bits(64), b : bits(
     )
   );
   let valid = strict_and_bool(ieee_is_finite(a), strict_and_bool(ieee_is_finite(b), ieee_is_finite(c)));
-  if invalid_zero_inf_a then
-    ieee_empty_exceptions(true)
-  else if invalid_zero_inf_b then
-    ieee_empty_exceptions(true)
-  else if invalid_inf_cancel then
-    ieee_empty_exceptions(true)
-  else if valid then {
+  let invalid = strict_or_bool(invalid_nan, strict_or_bool(invalid_zero_inf, invalid_inf_cancel));
+  if valid then {
     let x = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(a));
     let y = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(b));
     let z = fp64_to_fp128(round_nearest_ties_to_even(), fp64_from_ieee(c));
@@ -737,14 +701,14 @@ function ieee_fma64_exceptions(rm : float_rounding_mode, a : bits(64), b : bits(
     let hi = fp128_fma(round_toward_positive(), x, y, z);
     let rounded = ieee_f64_rounded_exceptions(rm, lo, hi, result);
     ieee_exception_facts(
-      invalid_nan,
+      invalid,
       false,
       ieee_has_overflow(rounded),
       ieee_has_underflow(rounded),
       ieee_has_inexact(rounded)
     )
   } else
-    ieee_empty_exceptions(invalid_nan)
+    ieee_exception_facts(invalid, false, false, false, false)
 }
 // Conversion sources are exactly representable in f128. Unlike arithmetic,
 // no directed interval is needed for their exact value.
