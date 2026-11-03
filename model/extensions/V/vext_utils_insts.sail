@@ -29,7 +29,7 @@ function valid_eew_emul(EEW : int, EMUL_pow : int) -> bool = {
 // 1. If the vill bit is set, then any attempt to execute a vector instruction that depends upon vtype will raise an illegal instruction exception.
 // 2. vset{i}vl{i} and whole-register loads, stores, and moves do not depend upon vtype.
 function valid_vtype() -> bool = {
-  vtype[vill] == 0b0
+  eq_anything(vtype[vill], 0b0)
 }
 
 // Check for vstart value
@@ -43,14 +43,16 @@ function assert_vstart(i : int) -> bool = {
 // unless the destination vector register is being written with a mask value (e.g., compares)
 // or the scalar result of a reduction.
 function valid_rd_mask(rd : vregidx, vm : bits(1)) -> bool = {
-  vm != 0b0 | rd != zvreg
+  strict_or_bool(eq_anything(vm, 0b1),
+                 not_bool(eq_anything(vregidx_bits(rd), vregidx_bits(zvreg))))
 }
 
 // Check that a vector register number for a vector register group is
 // a multiple of its EMUL. Fractional EMULs are rounded up to 1.
 function valid_reg_group(r : vregidx, EMUL_pow : int) -> bool = {
   let reg_group_size = if EMUL_pow > 0 then 2 ^ EMUL_pow else 1;
-  unsigned(vregidx_bits(r)) % reg_group_size == 0
+  let remainder : option(int) = Some(unsigned(vregidx_bits(r)) % reg_group_size);
+  eq_anything(remainder, Some(0))
 }
 
 // For whole register loads/stores: "The nf field encodes how many
@@ -420,6 +422,43 @@ $endif
 // (vs3 for store and vs2 for reduction). There's no destination register to be masked.
 // In these cases, this function can be called to simply get the mask vector for vs (without the prepared vd result vector).
 val init_masked_source : forall 'n 'p, 'n > 0. (int('n), int('p), bits('n)) -> result(bits('n), unit)
+$ifdef SYMBOLIC
+function init_masked_source(num_elem, LMUL_pow, vm_val) = {
+  assert_vector_num_elem(num_elem);
+  assert_lmul_pow(LMUL_pow);
+  let start_element : nat = get_start_element();
+  let end_element   = get_end_element();
+  var mask : bits('n) = undefined;
+
+  // Determine the actual number of elements when lmul < 1
+  let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
+  assert(num_elem >= real_num_elem);
+
+  if __isla_use_extra_ops then
+    return Ok(isla_init_mask(num_elem, start_element, end_element, real_num_elem, vm_val));
+
+  foreach (i from 0 to (num_elem - 1)) {
+    if i < start_element then {
+      // Prestart elements defined by vstart
+      mask[i] = 0b0
+    } else if i > end_element then {
+      // Tail elements defined by vl
+      mask[i] = 0b0
+    } else if i >= real_num_elem then {
+      // Tail elements defined by lmul < 1
+      mask[i] = 0b0
+    } else if vm_val[i] == 0b0 then {
+      // Inactive body elements defined by vm
+      mask[i] = 0b0
+    } else {
+      // Active body elements
+      mask[i] = 0b1;
+    }
+  };
+
+  Ok(mask)
+}
+$else
 function init_masked_source(num_elem, LMUL_pow, vm_val) = {
   assert_vector_num_elem(num_elem);
   assert_lmul_pow(LMUL_pow);
@@ -452,6 +491,7 @@ function init_masked_source(num_elem, LMUL_pow, vm_val) = {
 
   Ok(mask)
 }
+$endif
 
 // Mask handling for carry functions that use masks as input/output
 // Only prestart and tail elements are masked in a mask value

@@ -95,7 +95,8 @@ add_custom_command(
         --c-no-main
         # Extra #include's.
         --c-header-include riscv_platform_if.h
-        --c-include riscv_softfloat.h
+        --c-header-include sail_softfloat_types.h
+        --c-include sail_softfloat.h
         # Don't dead-code eliminate these functions.
         --c-preserve init_model
         --c-preserve init_boot_requirements
@@ -129,6 +130,8 @@ add_custom_command(
         --c-preserve rvfi_trap
         # Preserve to_str functions.
         --c-preserve ptw_error_to_str
+        --c-preserve ext_decode
+        --c-preserve execute
         # Input files.
         ${SAIL_MODULES}
         ${project_file}

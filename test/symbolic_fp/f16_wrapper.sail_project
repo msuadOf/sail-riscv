@@ -1,0 +1,20 @@
+prelude {
+  files
+    ../../model/prelude/prelude.sail,
+    ../../model/prelude/ieee_fp_primops.sail,
+}
+
+core {
+  requires prelude
+  files
+    ../../model/core/softfloat_interface.sail,
+    ../../model/core/ieee_fp_exceptions.sail,
+}
+
+f16_test {
+  requires prelude, core
+  files
+    ../../model/extensions/FD/softfloat_symbolic.sail,
+    ../../model/extensions/FD/softfloat_symbolic_f16.sail,
+    f16_wrapper.sail,
+}

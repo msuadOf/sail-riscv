@@ -1,0 +1,12 @@
+[package]
+name = "solve-vpr-state-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "solve-vpr-state-probe"
+path = "../solve_vpr_state_runner.rs"
+
+[dependencies]
+isla-lib = { path = "../../../../isla/isla-lib" }

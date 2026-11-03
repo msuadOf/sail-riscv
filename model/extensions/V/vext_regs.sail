@@ -241,13 +241,21 @@ val wV_from_vector = monadic "write_register_from_vector" : forall 'n, 0 <= 'n <
 val set_V_bits : (vregidx, vlenbits) -> unit effect {wreg}
 
 function set_V_bits(i: vregidx, data : vlenbits) = {
-    if __isla_vector_vpr then wV_from_vector(unsigned(vregidx_bits(i)), data, VPRs) else wV_bits(i, data)
+    if __isla_vector_vpr then {
+      wV_from_vector(unsigned(vregidx_bits(i)), data, VPRs);
+      dirty_v_context();
+      vreg_write_callback(i, data);
+    } else wV_bits(i, data)
 }
 
 val set_V : (vregno, vlenbits) -> unit effect {wreg}
 
 function set_V(Vregno(r) : vregno, v) = {
-    if __isla_vector_vpr then wV_from_vector(r, v, VPRs) else wV(Vregno(r), v)
+    if __isla_vector_vpr then {
+      wV_from_vector(r, v, VPRs);
+      dirty_v_context();
+      vreg_write_callback(vregno_to_vregidx(Vregno(r)), v);
+    } else wV(Vregno(r), v)
 }
 $else
 val get_V_bits : vregidx -> vlenbits effect {rreg}

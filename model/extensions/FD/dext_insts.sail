@@ -123,10 +123,10 @@ function f_is_NaN_D(x64 : bits(64)) -> bool = {
 
 function negate_D(x64 : bits(64)) -> bits(64) = {
   let (sign, exp, mant) = fsplit_D (x64);
-  let new_sign = if (sign == 0b0) then 0b1 else 0b0;
+  let new_sign = sign ^ 0b1;
   fmake_D (new_sign, exp, mant)
 }
-
+// 旧辅助函数：当前无调用；相同 NaN 位型会误判为 true；改用 riscv_f64Eq 时须将 (fflags, bool) 调整为旧序 (bool, fflags)。
 function feq_quiet_D(v1 : bits(64), v2 : bits(64)) -> (bool, bits(5)) = {
   let (s1, e1, m1) = fsplit_D (v1);
   let (s2, e2, m2) = fsplit_D (v2);
@@ -142,7 +142,7 @@ function feq_quiet_D(v1 : bits(64), v2 : bits(64)) -> (bool, bits(5)) = {
 
   (result, fflags)
 }
-
+// 旧辅助函数：当前无调用；NaN 未屏蔽且 -0 < +0 误判 true；is_quiet 为 true 用 riscv_f64Lt_quiet，否则用 riscv_f64Lt，并调整返回元组顺序。
 function flt_D(v1 : bits(64), v2 : bits(64), is_quiet : bool) -> (bool, bits(5)) = {
   let (s1, e1, m1) = fsplit_D (v1);
   let (s2, e2, m2) = fsplit_D (v2);
@@ -605,6 +605,10 @@ mapping f_un_rm_ff_type_mnemonic_D : f_un_rm_ff_op_D <-> string = {
     FCVT_D_S  <-> "fcvt.d.s"
 }
 
+mapping clause assembly = F_UN_RM_FF_TYPE_D(rs1, RM_RNE, rd, FCVT_D_S)
+                      <-> "fcvt.d.s" ^ spc() ^ freg_or_reg_name(rd)
+                          ^ sep() ^ freg_or_reg_name(rs1)
+
 mapping clause assembly = F_UN_RM_FF_TYPE_D(rs1, rm, rd, op)
                       <-> f_un_rm_ff_type_mnemonic_D(op)
                           ^ spc() ^ freg_or_reg_name(rd)
@@ -630,6 +634,14 @@ mapping f_un_rm_xf_type_mnemonic_D : f_un_rm_xf_op_D <-> string = {
     FCVT_D_L  <-> "fcvt.d.l",
     FCVT_D_LU <-> "fcvt.d.lu",
 }
+
+mapping clause assembly = F_UN_RM_XF_TYPE_D(rs1, RM_RNE, rd, FCVT_D_W)
+                      <-> "fcvt.d.w" ^ spc() ^ freg_or_reg_name(rd)
+                          ^ sep() ^ reg_name(rs1)
+
+mapping clause assembly = F_UN_RM_XF_TYPE_D(rs1, RM_RNE, rd, FCVT_D_WU)
+                      <-> "fcvt.d.wu" ^ spc() ^ freg_or_reg_name(rd)
+                          ^ sep() ^ reg_name(rs1)
 
 mapping clause assembly = F_UN_RM_XF_TYPE_D(rs1, rm, rd, op)
                       <-> f_un_rm_xf_type_mnemonic_D(op)
@@ -719,17 +731,7 @@ function clause execute F_BIN_F_TYPE_D(rs2, rs1, rd, FMIN_D) = {
   let rs1_val_D = F_or_X_D(rs1);
   let rs2_val_D = F_or_X_D(rs2);
 
-  let is_quiet  = true;
-  let (rs1_lt_rs2, fflags) = fle_D (rs1_val_D, rs2_val_D, is_quiet);
-
-  let rd_val_D  = if      (f_is_NaN_D(rs1_val_D) & f_is_NaN_D(rs2_val_D))           then canonical_NaN_D()
-                  else if f_is_NaN_D(rs1_val_D)                                     then rs2_val_D
-                  else if f_is_NaN_D(rs2_val_D)                                     then rs1_val_D
-                  else if (f_is_neg_zero_D(rs1_val_D) & f_is_pos_zero_D(rs2_val_D)) then rs1_val_D
-                  else if (f_is_neg_zero_D(rs2_val_D) & f_is_pos_zero_D(rs1_val_D)) then rs2_val_D
-                  else if rs1_lt_rs2                                                then rs1_val_D
-                  else /* (not rs1_lt_rs2) */                                            rs2_val_D;
-
+  let (fflags, rd_val_D) = fp_min_pure(rs1_val_D, rs2_val_D);
   accrue_fflags(fflags);
   F_or_X_D(rd) = rd_val_D;
   RETIRE_SUCCESS
@@ -739,17 +741,7 @@ function clause execute F_BIN_F_TYPE_D(rs2, rs1, rd, FMAX_D) = {
   let rs1_val_D = F_or_X_D(rs1);
   let rs2_val_D = F_or_X_D(rs2);
 
-  let is_quiet  = true;
-  let (rs2_lt_rs1, fflags) = fle_D (rs2_val_D, rs1_val_D, is_quiet);
-
-  let rd_val_D  = if      (f_is_NaN_D(rs1_val_D) & f_is_NaN_D(rs2_val_D))           then canonical_NaN_D()
-                  else if f_is_NaN_D(rs1_val_D)                                     then rs2_val_D
-                  else if f_is_NaN_D(rs2_val_D)                                     then rs1_val_D
-                  else if (f_is_neg_zero_D(rs1_val_D) & f_is_pos_zero_D(rs2_val_D)) then rs2_val_D
-                  else if (f_is_neg_zero_D(rs2_val_D) & f_is_pos_zero_D(rs1_val_D)) then rs1_val_D
-                  else if rs2_lt_rs1                                                then rs1_val_D
-                  else /* (not rs2_lt_rs1) */                                            rs2_val_D;
-
+  let (fflags, rd_val_D) = fp_max_pure(rs1_val_D, rs2_val_D);
   accrue_fflags(fflags);
   F_or_X_D(rd) = rd_val_D;
   RETIRE_SUCCESS

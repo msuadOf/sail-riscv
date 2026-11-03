@@ -36,7 +36,7 @@ function fmake_H(sign : bits(1), exp : bits(5), mant : bits(10)) -> bits(16) =
 
 function negate_H(xf16 : bits(16)) -> bits(16) = {
   let (sign, exp, mant) = fsplit_H (xf16);
-  let new_sign = if (sign == 0b0) then 0b1 else 0b0;
+  let new_sign = sign ^ 0b1;
   fmake_H (new_sign, exp, mant)
 }
 
@@ -376,17 +376,7 @@ function clause execute F_BIN_F_TYPE_H(rs2, rs1, rd, FMIN_H) = {
   let rs1_val_H = F_or_X_H(rs1);
   let rs2_val_H = F_or_X_H(rs2);
 
-  let is_quiet  = true;
-  let (rs1_lt_rs2, fflags) = fle_H (rs1_val_H, rs2_val_H, is_quiet);
-
-  let rd_val_H  = if      (f_is_NaN_H(rs1_val_H) & f_is_NaN_H(rs2_val_H))           then canonical_NaN_H()
-                  else if f_is_NaN_H(rs1_val_H)                                     then rs2_val_H
-                  else if f_is_NaN_H(rs2_val_H)                                     then rs1_val_H
-                  else if (f_is_neg_zero_H(rs1_val_H) & f_is_pos_zero_H(rs2_val_H)) then rs1_val_H
-                  else if (f_is_neg_zero_H(rs2_val_H) & f_is_pos_zero_H(rs1_val_H)) then rs2_val_H
-                  else if rs1_lt_rs2                                                then rs1_val_H
-                  else /* (not rs1_lt_rs2) */                                            rs2_val_H;
-
+  let (fflags, rd_val_H) = fp_min_pure(rs1_val_H, rs2_val_H);
   accrue_fflags(fflags);
   F_or_X_H(rd) = rd_val_H;
   RETIRE_SUCCESS
@@ -396,17 +386,7 @@ function clause execute F_BIN_F_TYPE_H(rs2, rs1, rd, FMAX_H) = {
   let rs1_val_H = F_or_X_H(rs1);
   let rs2_val_H = F_or_X_H(rs2);
 
-  let is_quiet  = true;
-  let (rs2_lt_rs1, fflags) = fle_H (rs2_val_H, rs1_val_H, is_quiet);
-
-  let rd_val_H  = if      (f_is_NaN_H(rs1_val_H) & f_is_NaN_H(rs2_val_H))           then canonical_NaN_H()
-                  else if f_is_NaN_H(rs1_val_H)                                     then rs2_val_H
-                  else if f_is_NaN_H(rs2_val_H)                                     then rs1_val_H
-                  else if (f_is_neg_zero_H(rs1_val_H) & f_is_pos_zero_H(rs2_val_H)) then rs2_val_H
-                  else if (f_is_neg_zero_H(rs2_val_H) & f_is_pos_zero_H(rs1_val_H)) then rs1_val_H
-                  else if rs2_lt_rs1                                                then rs1_val_H
-                  else /* (not rs2_lt_rs1) */                                            rs2_val_H;
-
+  let (fflags, rd_val_H) = fp_max_pure(rs1_val_H, rs2_val_H);
   accrue_fflags(fflags);
   F_or_X_H(rd) = rd_val_H;
   RETIRE_SUCCESS
@@ -754,6 +734,14 @@ mapping f_un_rm_ff_type_mnemonic_H : f_un_rm_ff_op_H <-> string = {
     FCVT_S_H  <-> "fcvt.s.h",
     FCVT_D_H  <-> "fcvt.d.h",
 }
+
+mapping clause assembly = F_UN_RM_FF_TYPE_H(rs1, RM_RNE, rd, FCVT_S_H)
+                      <-> "fcvt.s.h" ^ spc() ^ freg_or_reg_name(rd)
+                          ^ sep() ^ freg_or_reg_name(rs1)
+
+mapping clause assembly = F_UN_RM_FF_TYPE_H(rs1, RM_RNE, rd, FCVT_D_H)
+                      <-> "fcvt.d.h" ^ spc() ^ freg_or_reg_name(rd)
+                          ^ sep() ^ freg_or_reg_name(rs1)
 
 mapping clause assembly = F_UN_RM_FF_TYPE_H(rs1, rm, rd, op)
                       <-> f_un_rm_ff_type_mnemonic_H(op)

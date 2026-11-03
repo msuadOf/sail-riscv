@@ -164,10 +164,10 @@ function f_is_NaN_S(x32 : bits(32)) -> bool = {
 
 function negate_S(x32: bits(32)) -> bits(32) = {
   let (sign, exp, mant) = fsplit_S (x32);
-  let new_sign = if (sign == 0b0) then 0b1 else 0b0;
+  let new_sign = sign ^ 0b1;
   fmake_S (new_sign, exp, mant)
 }
-
+// 旧辅助函数：当前无调用；相同 NaN 位型会误判为 true；改用 riscv_f32Eq 时须将 (fflags, bool) 调整为旧序 (bool, fflags)。
 function feq_quiet_S(v1 : bits(32), v2 : bits(32)) -> (bool, bits(5)) = {
   let (s1, e1, m1) = fsplit_S (v1);
   let (s2, e2, m2) = fsplit_S (v2);
@@ -183,7 +183,7 @@ function feq_quiet_S(v1 : bits(32), v2 : bits(32)) -> (bool, bits(5)) = {
 
   (result, fflags)
 }
-
+// 旧辅助函数：当前无调用；NaN 未屏蔽且 -0 < +0 误判 true；is_quiet 为 true 用 riscv_f32Lt_quiet，否则用 riscv_f32Lt，并调整返回元组顺序。
 function flt_S(v1 : bits(32), v2 : bits(32), is_quiet : bool) -> (bool, bits(5)) = {
   let (s1, e1, m1) = fsplit_S (v1);
   let (s2, e2, m2) = fsplit_S (v2);
@@ -787,17 +787,7 @@ function clause execute F_BIN_TYPE_F_S(rs2, rs1, rd, FMIN_S) = {
   let rs1_val_S = F_or_X_S(rs1);
   let rs2_val_S = F_or_X_S(rs2);
 
-  let is_quiet  = true;
-  let (rs1_lt_rs2, fflags) = fle_S (rs1_val_S, rs2_val_S, is_quiet);
-
-  let rd_val_S  = if      (f_is_NaN_S(rs1_val_S) & f_is_NaN_S(rs2_val_S))           then canonical_NaN_S()
-                  else if f_is_NaN_S(rs1_val_S)                                     then rs2_val_S
-                  else if f_is_NaN_S(rs2_val_S)                                     then rs1_val_S
-                  else if (f_is_neg_zero_S(rs1_val_S) & f_is_pos_zero_S(rs2_val_S)) then rs1_val_S
-                  else if (f_is_neg_zero_S(rs2_val_S) & f_is_pos_zero_S(rs1_val_S)) then rs2_val_S
-                  else if rs1_lt_rs2                                                then rs1_val_S
-                  else /* (not rs1_lt_rs2) */                                            rs2_val_S;
-
+  let (fflags, rd_val_S) = fp_min_pure(rs1_val_S, rs2_val_S);
   accrue_fflags(fflags);
   F_or_X_S(rd) = rd_val_S;
   RETIRE_SUCCESS
@@ -807,17 +797,7 @@ function clause execute F_BIN_TYPE_F_S(rs2, rs1, rd, FMAX_S) = {
   let rs1_val_S = F_or_X_S(rs1);
   let rs2_val_S = F_or_X_S(rs2);
 
-  let is_quiet  = true;
-  let (rs2_lt_rs1, fflags) = fle_S (rs2_val_S, rs1_val_S, is_quiet);
-
-  let rd_val_S  = if      (f_is_NaN_S(rs1_val_S) & f_is_NaN_S(rs2_val_S))           then canonical_NaN_S()
-                  else if f_is_NaN_S(rs1_val_S)                                     then rs2_val_S
-                  else if f_is_NaN_S(rs2_val_S)                                     then rs1_val_S
-                  else if (f_is_neg_zero_S(rs1_val_S) & f_is_pos_zero_S(rs2_val_S)) then rs2_val_S
-                  else if (f_is_neg_zero_S(rs2_val_S) & f_is_pos_zero_S(rs1_val_S)) then rs1_val_S
-                  else if rs2_lt_rs1                                                then rs1_val_S
-                  else /* (not rs2_lt_rs1) */                                            rs2_val_S;
-
+  let (fflags, rd_val_S) = fp_max_pure(rs1_val_S, rs2_val_S);
   accrue_fflags(fflags);
   F_or_X_S(rd) = rd_val_S;
   RETIRE_SUCCESS

@@ -49,10 +49,16 @@ target_compile_options(softfloat PRIVATE
 )
 
 # Taken from build/Linux-x86_64-GCC/Makefile
-target_compile_definitions(softfloat PRIVATE
-    SOFTFLOAT_ROUND_ODD
-    INLINE_LEVEL=5
-    SOFTFLOAT_FAST_DIV32TO16
-    SOFTFLOAT_FAST_DIV64TO32
-    SOFTFLOAT_FAST_INT64
+target_compile_features(softfloat PRIVATE c_std_11)
+
+target_compile_definitions(softfloat
+    PRIVATE
+        SOFTFLOAT_ROUND_ODD
+        INLINE_LEVEL=5
+        SOFTFLOAT_FAST_DIV32TO16
+        SOFTFLOAT_FAST_DIV64TO32
+    PUBLIC
+        SOFTFLOAT_FAST_INT64
+        "$<$<COMPILE_LANGUAGE:C>:THREAD_LOCAL=_Thread_local>"
+        "$<$<COMPILE_LANGUAGE:CXX>:THREAD_LOCAL=thread_local>"
 )

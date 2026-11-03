@@ -1,0 +1,19 @@
+prelude {
+  files
+    ../../model/prelude/prelude.sail,
+    ../../model/prelude/ieee_fp_primops.sail,
+}
+
+core {
+  requires prelude
+  files
+    ../../model/core/softfloat_interface.sail,
+    ../../model/core/ieee_fp_exceptions.sail,
+}
+
+type_reuse_test {
+  requires prelude, core
+  files
+    ../../model/extensions/FD/softfloat_symbolic.sail,
+    type_reuse.sail
+}

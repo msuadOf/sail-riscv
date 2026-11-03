@@ -25,9 +25,9 @@ end_column = 1
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 434
+start_line = 473
 start_column = 2
-end_line = 451
+end_line = 490
 end_column = 4
 
 # execute RIVVTYPE 的 widening reduction foreach。基线日志持续命中 59:8-59:21。

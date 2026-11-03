@@ -28,6 +28,55 @@ mapping clause encdec = FVVMTYPE(funct6, vm, vs2, vs1, vd)
      | (currentlyEnabled(Ext_Zve32f) & get_sew() == 32)
      | (currentlyEnabled(Ext_Zve64d) & get_sew() == 64)
 
+$ifdef SYMBOLIC
+function clause execute FVVMTYPE(funct6, vm, vs2, vs1, vd) = {
+  let rm_3b    = fcsr[FRM];
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if illegal_fp_vd_unmasked(SEW, rm_3b) |
+     not(valid_reg_group(vs1, LMUL_pow)) |
+     not(valid_reg_group(vs2, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW != 8);
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let vs1_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs1);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : bits('n)             = read_vmask(num_elem, 0b0, vd);
+
+  let (initial_result, mask) : (bits('n), bits('n)) = match init_masked_result_cmp(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  var combined_flags : bits_fflags = 0b00000;
+  foreach (i from 0 to (num_elem - 1)) {
+    if mask[i] == 0b1 then {
+      let (lane_flags, lane_value) : (bits_fflags, bool) = match funct6 {
+          FVVM_VMFEQ       => fp_eq_pure(vs2_val[i], vs1_val[i]),
+          FVVM_VMFNE       => fp_ne_pure(vs2_val[i], vs1_val[i]),
+          FVVM_VMFLE       => fp_le_pure(vs2_val[i], vs1_val[i]),
+          FVVM_VMFLT       => fp_lt_pure(vs2_val[i], vs1_val[i])
+      };
+      result[i] = isla_bool_to_bit(lane_value);
+      combined_flags = combined_flags | lane_flags
+    }
+  };
+  accrue_fflags(combined_flags);
+
+  write_vmask(num_elem, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+
+$else
 function clause execute FVVMTYPE(funct6, vm, vs2, vs1, vd) = {
   let rm_3b    = fcsr[FRM];
   let SEW      = get_sew();
@@ -72,6 +121,7 @@ function clause execute FVVMTYPE(funct6, vm, vs2, vs1, vd) = {
   RETIRE_SUCCESS
 }
 
+$endif
 mapping fvvmtype_mnemonic : fvvmfunct6 <-> string = {
   FVVM_VMFEQ      <-> "vmfeq.vv",
   FVVM_VMFLE      <-> "vmfle.vv",
@@ -101,6 +151,56 @@ mapping clause encdec = FVFMTYPE(funct6, vm, vs2, rs1, vd)
      | (currentlyEnabled(Ext_Zve32f) & get_sew() == 32)
      | (currentlyEnabled(Ext_Zve64d) & get_sew() == 64)
 
+$ifdef SYMBOLIC
+function clause execute FVFMTYPE(funct6, vm, vs2, rs1, vd) = {
+  let rm_3b    = fcsr[FRM];
+  let SEW      = get_sew();
+  let LMUL_pow = get_lmul_pow();
+  let num_elem = get_num_elem(LMUL_pow, SEW);
+
+  if illegal_fp_vd_unmasked(SEW, rm_3b) |
+     not(valid_reg_group(vs2, LMUL_pow))
+  then return Illegal_Instruction();
+
+  assert(SEW != 8);
+
+  let 'n = num_elem;
+  let 'm = SEW;
+
+  let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
+  let rs1_val : bits('m)             = get_scalar_fp(rs1, 'm);
+  let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
+  let vd_val  : bits('n)             = read_vmask(num_elem, 0b0, vd);
+
+  let (initial_result, mask) : (bits('n), bits('n)) = match init_masked_result_cmp(num_elem, SEW, LMUL_pow, vd_val, vm_val) {
+    Ok(v)   => v,
+    Err(()) => return Illegal_Instruction()
+  };
+  var result = initial_result;
+
+  var combined_flags : bits_fflags = 0b00000;
+  foreach (i from 0 to (num_elem - 1)) {
+    if mask[i] == 0b1 then {
+      let (lane_flags, lane_value) : (bits_fflags, bool) = match funct6 {
+          VFM_VMFEQ        => fp_eq_pure(vs2_val[i], rs1_val),
+          VFM_VMFNE        => fp_ne_pure(vs2_val[i], rs1_val),
+          VFM_VMFLE        => fp_le_pure(vs2_val[i], rs1_val),
+          VFM_VMFLT        => fp_lt_pure(vs2_val[i], rs1_val),
+          VFM_VMFGE        => fp_ge_pure(vs2_val[i], rs1_val),
+          VFM_VMFGT        => fp_gt_pure(vs2_val[i], rs1_val)
+      };
+      result[i] = isla_bool_to_bit(lane_value);
+      combined_flags = combined_flags | lane_flags
+    }
+  };
+  accrue_fflags(combined_flags);
+
+  write_vmask(num_elem, vd, result);
+  set_vstart(zeros());
+  RETIRE_SUCCESS
+}
+
+$else
 function clause execute FVFMTYPE(funct6, vm, vs2, rs1, vd) = {
   let rm_3b    = fcsr[FRM];
   let SEW      = get_sew();
@@ -146,6 +246,7 @@ function clause execute FVFMTYPE(funct6, vm, vs2, rs1, vd) = {
   RETIRE_SUCCESS
 }
 
+$endif
 mapping fvfmtype_mnemonic : fvfmfunct6 <-> string = {
   VFM_VMFEQ      <-> "vmfeq.vf",
   VFM_VMFLE      <-> "vmfle.vf",

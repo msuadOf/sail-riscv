@@ -1,0 +1,13 @@
+prelude {
+  files
+    ../../../model/prelude/prelude.sail,
+    ../../../model/prelude/ieee_fp_primops.sail,
+}
+
+bf16_probe {
+  requires prelude
+  files
+    probe_defs.sail,
+    ../../../model/extensions/bfloat16/zfbfmin_utils.sail,
+    probe.sail,
+}

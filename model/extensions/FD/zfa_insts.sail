@@ -9,7 +9,7 @@
 function clause currentlyEnabled(Ext_Zfa) = hartSupports(Ext_Zfa) & currentlyEnabled(Ext_F)
 
 // FLI.H
-
+val fli_constant_mnemonic : bits(5) <-> string
 union clause instruction = FLI_H : (bits(5), fregidx)
 
 mapping clause encdec = FLI_H(constantidx, rd)
@@ -17,7 +17,7 @@ mapping clause encdec = FLI_H(constantidx, rd)
   when (currentlyEnabled(Ext_Zfh) | currentlyEnabled(Ext_Zvfh)) & currentlyEnabled(Ext_Zfa)
 
 mapping clause assembly = FLI_H(constantidx, rd)
-  <-> "fli.h" ^ spc() ^ freg_name(rd) ^ sep() ^ hex_bits_5(constantidx)
+  <-> "fli.h" ^ spc() ^ freg_name(rd) ^ sep() ^ fli_constant_mnemonic(constantidx)
 
 function clause execute FLI_H(constantidx, rd) = {
   let bits : bits(16) = match constantidx {
@@ -67,7 +67,7 @@ mapping clause encdec = FLI_S(constantidx, rd)
   when currentlyEnabled(Ext_Zfa)
 
 mapping clause assembly = FLI_S(constantidx, rd)
-  <-> "fli.s" ^ spc() ^ freg_name(rd) ^ sep() ^ hex_bits_5(constantidx)
+  <-> "fli.s" ^ spc() ^ freg_name(rd) ^ sep() ^ fli_constant_mnemonic(constantidx)
 
 function clause execute FLI_S(constantidx, rd) = {
   let bits : bits(32) = match constantidx {
@@ -117,7 +117,7 @@ mapping clause encdec = FLI_D(constantidx, rd)
   when currentlyEnabled(Ext_D) & currentlyEnabled(Ext_Zfa)
 
 mapping clause assembly = FLI_D(constantidx, rd)
-  <-> "fli.d" ^ spc() ^ freg_name(rd) ^ sep() ^ hex_bits_5(constantidx)
+  <-> "fli.d" ^ spc() ^ freg_name(rd) ^ sep() ^ fli_constant_mnemonic(constantidx)
 
 function clause execute FLI_D(constantidx, rd) = {
   let bits : bits(64) = match constantidx {
@@ -175,15 +175,7 @@ function clause execute FMINM_H(rs2, rs1, rd) = {
   let rs1_val_H = F_H(rs1);
   let rs2_val_H = F_H(rs2);
 
-  let is_quiet  = true;
-  let (rs1_lt_rs2, fflags) = fle_H (rs1_val_H, rs2_val_H, is_quiet);
-
-  let rd_val_H  = if      (f_is_NaN_H(rs1_val_H) | f_is_NaN_H(rs2_val_H))           then canonical_NaN_H()
-                  else if (f_is_neg_zero_H(rs1_val_H) & f_is_pos_zero_H(rs2_val_H)) then rs1_val_H
-                  else if (f_is_neg_zero_H(rs2_val_H) & f_is_pos_zero_H(rs1_val_H)) then rs2_val_H
-                  else if rs1_lt_rs2                                                then rs1_val_H
-                  else /* (not rs1_lt_rs2) */                                            rs2_val_H;
-
+  let (fflags, rd_val_H) = fp_minm_pure(rs1_val_H, rs2_val_H);
   accrue_fflags(fflags);
   F_H(rd) = rd_val_H;
   RETIRE_SUCCESS
@@ -206,15 +198,7 @@ function clause execute FMAXM_H(rs2, rs1, rd) = {
   let rs1_val_H = F_H(rs1);
   let rs2_val_H = F_H(rs2);
 
-  let is_quiet  = true;
-  let (rs2_lt_rs1, fflags) = fle_H (rs2_val_H, rs1_val_H, is_quiet);
-
-  let rd_val_H =  if      (f_is_NaN_H(rs1_val_H) | f_is_NaN_H(rs2_val_H))           then canonical_NaN_H()
-                  else if (f_is_neg_zero_H(rs1_val_H) & f_is_pos_zero_H(rs2_val_H)) then rs2_val_H
-                  else if (f_is_neg_zero_H(rs2_val_H) & f_is_pos_zero_H(rs1_val_H)) then rs1_val_H
-                  else if rs2_lt_rs1                                                then rs1_val_H
-                  else /* (not rs2_lt_rs1) */                                            rs2_val_H;
-
+  let (fflags, rd_val_H) = fp_maxm_pure(rs1_val_H, rs2_val_H);
   accrue_fflags(fflags);
   F_H(rd) = rd_val_H;
   RETIRE_SUCCESS
@@ -237,15 +221,7 @@ function clause execute FMINM_S(rs2, rs1, rd) = {
   let rs1_val_S = F_S(rs1);
   let rs2_val_S = F_S(rs2);
 
-  let is_quiet  = true;
-  let (rs1_lt_rs2, fflags) = fle_S (rs1_val_S, rs2_val_S, is_quiet);
-
-  let rd_val_S  = if      (f_is_NaN_S(rs1_val_S) | f_is_NaN_S(rs2_val_S))           then canonical_NaN_S()
-                  else if (f_is_neg_zero_S(rs1_val_S) & f_is_pos_zero_S(rs2_val_S)) then rs1_val_S
-                  else if (f_is_neg_zero_S(rs2_val_S) & f_is_pos_zero_S(rs1_val_S)) then rs2_val_S
-                  else if rs1_lt_rs2                                                then rs1_val_S
-                  else /* (not rs1_lt_rs2) */                                            rs2_val_S;
-
+  let (fflags, rd_val_S) = fp_minm_pure(rs1_val_S, rs2_val_S);
   accrue_fflags(fflags);
   F_S(rd) = rd_val_S;
   RETIRE_SUCCESS
@@ -268,15 +244,7 @@ function clause execute FMAXM_S(rs2, rs1, rd) = {
   let rs1_val_S = F_S(rs1);
   let rs2_val_S = F_S(rs2);
 
-  let is_quiet  = true;
-  let (rs2_lt_rs1, fflags) = fle_S (rs2_val_S, rs1_val_S, is_quiet);
-
-  let rd_val_S  = if      (f_is_NaN_S(rs1_val_S) | f_is_NaN_S(rs2_val_S))           then canonical_NaN_S()
-                  else if (f_is_neg_zero_S(rs1_val_S) & f_is_pos_zero_S(rs2_val_S)) then rs2_val_S
-                  else if (f_is_neg_zero_S(rs2_val_S) & f_is_pos_zero_S(rs1_val_S)) then rs1_val_S
-                  else if rs2_lt_rs1                                                then rs1_val_S
-                  else /* (not rs2_lt_rs1) */                                            rs2_val_S;
-
+  let (fflags, rd_val_S) = fp_maxm_pure(rs1_val_S, rs2_val_S);
   accrue_fflags(fflags);
   F_S(rd) = rd_val_S;
   RETIRE_SUCCESS
@@ -299,15 +267,7 @@ function clause execute FMINM_D(rs2, rs1, rd) = {
   let rs1_val_D = F_D(rs1);
   let rs2_val_D = F_D(rs2);
 
-  let is_quiet  = true;
-  let (rs1_lt_rs2, fflags) = fle_D (rs1_val_D, rs2_val_D, is_quiet);
-
-  let rd_val_D  = if      (f_is_NaN_D(rs1_val_D) | f_is_NaN_D(rs2_val_D))           then canonical_NaN_D()
-                  else if (f_is_neg_zero_D(rs1_val_D) & f_is_pos_zero_D(rs2_val_D)) then rs1_val_D
-                  else if (f_is_neg_zero_D(rs2_val_D) & f_is_pos_zero_D(rs1_val_D)) then rs2_val_D
-                  else if rs1_lt_rs2                                                then rs1_val_D
-                  else                                                              rs2_val_D;
-
+  let (fflags, rd_val_D) = fp_minm_pure(rs1_val_D, rs2_val_D);
   accrue_fflags(fflags);
   F_D(rd) = rd_val_D;
   RETIRE_SUCCESS
@@ -330,15 +290,7 @@ function clause execute FMAXM_D(rs2, rs1, rd) = {
   let rs1_val_D = F_D(rs1);
   let rs2_val_D = F_D(rs2);
 
-  let is_quiet  = true;
-  let (rs2_lt_rs1, fflags) = fle_D (rs2_val_D, rs1_val_D, is_quiet);
-
-  let rd_val_D  = if      (f_is_NaN_D(rs1_val_D) | f_is_NaN_D(rs2_val_D))           then canonical_NaN_D()
-                  else if (f_is_neg_zero_D(rs1_val_D) & f_is_pos_zero_D(rs2_val_D)) then rs2_val_D
-                  else if (f_is_neg_zero_D(rs2_val_D) & f_is_pos_zero_D(rs1_val_D)) then rs1_val_D
-                  else if rs2_lt_rs1                                                then rs1_val_D
-                  else                                                              rs2_val_D;
-
+  let (fflags, rd_val_D) = fp_maxm_pure(rs1_val_D, rs2_val_D);
   accrue_fflags(fflags);
   F_D(rd) = rd_val_D;
   RETIRE_SUCCESS
@@ -791,4 +743,40 @@ function clause execute FCVTMOD_W_D(rs1, rd) = {
   accrue_fflags(fflags);
   X(rd) = sign_extend(rd_val);
   RETIRE_SUCCESS
+}
+
+// 汇编立即数按表索引命名；H 的 65536.0 与 inf 虽结果相同，仍保留不同编码。
+mapping fli_constant_mnemonic : bits(5) <-> string = {
+  0b00000 <-> "-1.0",
+  0b00001 <-> "min",
+  0b00010 <-> "0.0000152587890625",
+  0b00011 <-> "0.000030517578125",
+  0b00100 <-> "0.00390625",
+  0b00101 <-> "0.0078125",
+  0b00110 <-> "0.0625",
+  0b00111 <-> "0.125",
+  0b01000 <-> "0.25",
+  0b01001 <-> "0.3125",
+  0b01010 <-> "0.375",
+  0b01011 <-> "0.4375",
+  0b01100 <-> "0.5",
+  0b01101 <-> "0.625",
+  0b01110 <-> "0.75",
+  0b01111 <-> "0.875",
+  0b10000 <-> "1.0",
+  0b10001 <-> "1.25",
+  0b10010 <-> "1.5",
+  0b10011 <-> "1.75",
+  0b10100 <-> "2.0",
+  0b10101 <-> "2.5",
+  0b10110 <-> "3.0",
+  0b10111 <-> "4.0",
+  0b11000 <-> "8.0",
+  0b11001 <-> "16.0",
+  0b11010 <-> "128.0",
+  0b11011 <-> "256.0",
+  0b11100 <-> "32768.0",
+  0b11101 <-> "65536.0",
+  0b11110 <-> "inf",
+  0b11111 <-> "nan",
 }

@@ -1,0 +1,8 @@
+[
+  {"name":"fmvh_x_d","width":32,"word":"e2108553","ctor":"FMVH_X_D","operands":[1,10],"effect":"x10=0x89abcdef from f1=0x89abcdef01234567"},
+  {"name":"fmvp_d_x","width":32,"word":"b2c58153","ctor":"FMVP_D_X","operands":[12,11,2],"effect":"f2=0x89abcdef01234567 from x12=0x89abcdef,x11=0x01234567"},
+  {"name":"c_flw","width":16,"word":"6000","ctor":"C_FLW","operands":[0,0,0],"effect":"decode only: rs1=x8,rd=f8,width=4"},
+  {"name":"c_flwsp","width":16,"word":"6082","ctor":"C_FLWSP","operands":[0,1],"effect":"decode only: rs1=sp,rd=f1,width=4"},
+  {"name":"c_fsw","width":16,"word":"e000","ctor":"C_FSW","operands":[0,0,0],"effect":"decode only: rs1=x8,rs2=f8,width=4"},
+  {"name":"c_fswsp","width":16,"word":"e006","ctor":"C_FSWSP","operands":[0,1],"effect":"decode only: rs1=sp,rs2=f1,width=4"}
+]

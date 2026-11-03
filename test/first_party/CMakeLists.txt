@@ -98,6 +98,7 @@ macro(add_first_party_test name)
 endmacro()
 
 add_first_party_test("test_bf16_nan_boxing.S")
+add_first_party_test_with_config("test_bf16_wma_flags.S" "rv64gcv_zfbfmin_zvfbfwma" 64 "no_override.json")
 add_first_party_test("test_hello_world.c")
 add_first_party_test("test_max_pmp.c")
 add_first_party_test("test_minstret.S")

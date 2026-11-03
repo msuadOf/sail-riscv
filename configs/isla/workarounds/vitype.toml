@@ -11,9 +11,9 @@ on_limit_reached = "concretize"
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 620
+start_line = 660
 start_column = 2
-end_line = 642
+end_line = 682
 end_column = 1
 
 # 下列区间只覆盖各 funct6 arm 的 foreach，不包含 1077 行的 funct6 分派。

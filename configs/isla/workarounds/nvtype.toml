@@ -16,9 +16,9 @@ end_column = 4
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 620
+start_line = 660
 start_column = 2
-end_line = 642
+end_line = 682
 end_column = 1
 
 [[execution_limits.region_fork_limits]]
@@ -26,7 +26,7 @@ max_forks_per_region = 1
 sample_bias = 65536
 sample_bias_direction = "jump"
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 634
+start_line = 674
 start_column = 4
-end_line = 639
+end_line = 679
 end_column = 5

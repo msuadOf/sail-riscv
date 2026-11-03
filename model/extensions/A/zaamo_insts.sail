@@ -56,9 +56,66 @@ mapping encdec_amoop : amoop <-> bits(5) = {
   AMOCAS  <-> 0b00101,
 }
 
+$ifdef SYMBOLIC
+val amo_layout : (amoop, bool, bool, regidx, regidx, word_width_wide, regidx) <-> bits(32)
+
+function amo_layout_forwards((op, aq, rl, rs2, rs1, size, rd)) =
+  encdec_amoop_forwards(op) @ bool_bit_forwards(aq) @ bool_bit_forwards(rl) @
+  encdec_reg_forwards(rs2) @ encdec_reg_forwards(rs1) @
+  width_enc_wide_forwards(size) @ encdec_reg_forwards(rd) @ 0b0101111
+
+function amo_layout_forwards_matches(_) = true
+
+function amo_layout_backwards(word) = match word[6..0] {
+  0b0101111 =>
+    (encdec_amoop_backwards(word[31..27]),
+     bool_bit_backwards(word[26..26]), bool_bit_backwards(word[25..25]),
+     encdec_reg_backwards(word[24..20]), encdec_reg_backwards(word[19..15]),
+     width_enc_wide_backwards(word[14..12]), encdec_reg_backwards(word[11..7])),
+}
+
+function amo_layout_op_matches(op : bits(5)) -> bool =
+  strict_or_bool(
+    strict_or_bool(
+      strict_or_bool(eq_anything(op, 0b00001), eq_anything(op, 0b00000)),
+      strict_or_bool(eq_anything(op, 0b00100), eq_anything(op, 0b01100))),
+    strict_or_bool(
+      strict_or_bool(eq_anything(op, 0b01000), eq_anything(op, 0b10000)),
+      strict_or_bool(
+        strict_or_bool(eq_anything(op, 0b10100), eq_anything(op, 0b11000)),
+        strict_or_bool(eq_anything(op, 0b11100), eq_anything(op, 0b00101)))))
+
+function amo_layout_width_matches(width : bits(3)) -> bool =
+  strict_or_bool(
+    strict_or_bool(eq_anything(width, 0b000), eq_anything(width, 0b001)),
+    strict_or_bool(
+      strict_or_bool(eq_anything(width, 0b010), eq_anything(width, 0b011)),
+      eq_anything(width, 0b100)))
+
+function amo_layout_reg_matches(reg : bits(5)) -> bool =
+  strict_or_bool(not_bool(base_E_enabled), eq_anything(reg[4], 0b0))
+
+function amo_layout_backwards_matches(word) =
+  strict_and_bool(
+    strict_and_bool(eq_anything(word[6..0], 0b0101111),
+                    amo_layout_op_matches(word[31..27])),
+    strict_and_bool(
+      amo_layout_width_matches(word[14..12]),
+      strict_and_bool(
+        amo_layout_reg_matches(word[24..20]),
+        strict_and_bool(amo_layout_reg_matches(word[19..15]),
+                        amo_layout_reg_matches(word[11..7])))))
+$endif
+
+$ifdef SYMBOLIC
+mapping clause encdec = AMO(op, aq, rl, rs2, rs1, size, rd)
+  <-> amo_layout((op, aq, rl, rs2, rs1, size, rd))
+  when amo_encoding_valid(size, op, rs2, rd)
+$else
 mapping clause encdec = AMO(op, aq, rl, rs2, rs1, size, rd)
   <-> encdec_amoop(op) @ bool_bit(aq) @ bool_bit(rl) @ encdec_reg(rs2) @ encdec_reg(rs1) @ width_enc_wide(size) @ encdec_reg(rd) @ 0b0101111
   when amo_encoding_valid(size, op, rs2, rd)
+$endif
 
 val execute_amo_width : forall 'width, 'width in {1, 2, 4, 8, 16}.
   (amoop, bool, bool, regidx, regidx, int('width), regidx) -> ExecutionResult
