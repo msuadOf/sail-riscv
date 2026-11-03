@@ -542,50 +542,48 @@ function riscv_f32ToUi16(rm : bits_rm, v : bits_S) -> (bits_fflags, bits(16)) = 
 }
 
 $ifdef SYMBOLIC
-// Narrow integer adapters branch on saturation after the active-lane gate.
+// The f16-to-i16 adapter branches on overflow after the active-lane gate.
+// Other narrow integer adapters retain their bitvector ITE saturation rules.
 function riscv_f16ToI16_pure(rm : bits_rm, v : bits_H) -> (bits_fflags, bits(16)) = {
   let (flag, sig32) = riscv_f16ToI32(rm, v);
   let overflow = not_bool(eq_anything(sig32, sign_extend(sig32[15 .. 0])));
-  if overflow then {
-    if eq_anything(sig32[31], 0b1) then (nvFlag(), 0x8000)
-    else (nvFlag(), 0x7fff)
-  } else (flag, sig32[15 .. 0])
+  let limit = ite(eq_anything(sig32[31], 0b1), 0x8000, 0x7fff);
+  if overflow then (nvFlag(), limit) else (flag, sig32[15 .. 0])
 }
 
 function riscv_f16ToI8_pure(rm : bits_rm, v : bits_H) -> (bits_fflags, bits(8)) = {
   let (flag, sig32) = riscv_f16ToI32(rm, v);
   let overflow = not_bool(eq_anything(sig32, sign_extend(sig32[7 .. 0])));
-  if overflow then {
-    if eq_anything(sig32[31], 0b1) then (nvFlag(), 0x80)
-    else (nvFlag(), 0x7f)
-  } else (flag, sig32[7 .. 0])
+  let limit = ite(eq_anything(sig32[31], 0b1), 0x80, 0x7f);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[7 .. 0]))
 }
 
 function riscv_f32ToI16_pure(rm : bits_rm, v : bits_S) -> (bits_fflags, bits(16)) = {
   let (flag, sig32) = riscv_f32ToI32(rm, v);
   let overflow = not_bool(eq_anything(sig32, sign_extend(sig32[15 .. 0])));
-  if overflow then {
-    if eq_anything(sig32[31], 0b1) then (nvFlag(), 0x8000)
-    else (nvFlag(), 0x7fff)
-  } else (flag, sig32[15 .. 0])
+  let limit = ite(eq_anything(sig32[31], 0b1), 0x8000, 0x7fff);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[15 .. 0]))
 }
 
 function riscv_f16ToUi16_pure(rm : bits_rm, v : bits_H) -> (bits_fflags, bits(16)) = {
   let (flag, sig32) = riscv_f16ToUi32(rm, v);
   let overflow = not_bool(eq_anything(sig32[31 .. 16], zeros(16)));
-  if overflow then (nvFlag(), ones(16)) else (flag, sig32[15 .. 0])
+  let limit = ones(16);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[15 .. 0]))
 }
 
 function riscv_f16ToUi8_pure(rm : bits_rm, v : bits_H) -> (bits_fflags, bits(8)) = {
   let (flag, sig32) = riscv_f16ToUi32(rm, v);
   let overflow = not_bool(eq_anything(sig32[31 .. 8], zeros(24)));
-  if overflow then (nvFlag(), ones(8)) else (flag, sig32[7 .. 0])
+  let limit = ones(8);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[7 .. 0]))
 }
 
 function riscv_f32ToUi16_pure(rm : bits_rm, v : bits_S) -> (bits_fflags, bits(16)) = {
   let (flag, sig32) = riscv_f32ToUi32(rm, v);
   let overflow = not_bool(eq_anything(sig32[31 .. 16], zeros(16)));
-  if overflow then (nvFlag(), ones(16)) else (flag, sig32[15 .. 0])
+  let limit = ones(16);
+  (ite(overflow, nvFlag(), flag), ite(overflow, limit, sig32[15 .. 0]))
 }
 
 $endif
