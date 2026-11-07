@@ -52,6 +52,16 @@ private function check_mmu_config() -> bool = {
       print_endline("One or more of Sv39/Sv48/Sv57 is enabled: these are not supported on RV32.");
     };
   };
+  if (config extensions.Svnapot.supported : bool) then {
+    if xlen == 32 then {
+      valid = false;
+      print_endline("Svnapot is not supported on RV32.");
+    };
+    if not(config extensions.Sv39.supported : bool) then {
+      valid = false;
+      print_endline("Enabling Svnapot requires Sv39.");
+    };
+  };
   if hartSupports(Ext_Svrsw60t59b) & not(hartSupports(Ext_Sv39))
   then {
     valid = false;
