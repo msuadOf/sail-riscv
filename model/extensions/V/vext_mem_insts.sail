@@ -521,7 +521,10 @@ mapping clause encdec = VLRETYPE(nf, rs1, width, vd)
 
 private function process_vlre(nf : nfields, vd : vregidx, load_width_bytes : word_width, rs1 : regidx, elem_per_reg : nat) -> ExecutionResult = {
   let start_element : nat = get_start_element();
-  if start_element >= nf * elem_per_reg then return RETIRE_SUCCESS; // no elements are written if vstart >= evl
+  if start_element >= nf * elem_per_reg then {
+    set_vstart(zeros());
+    return RETIRE_SUCCESS // no elements are written if vstart >= evl
+  };
   let elem_to_align : int = start_element % elem_per_reg;
   var cur_field : int = start_element / elem_per_reg;
   var cur_elem  : int = start_element;
@@ -579,7 +582,10 @@ mapping clause encdec = VSRETYPE(nf, rs1, vs3)
 
 private function process_vsre(nf : nfields, load_width_bytes : word_width, rs1 : regidx, vs3 : vregidx, elem_per_reg : nat) -> ExecutionResult = {
   let start_element : nat = get_start_element();
-  if start_element >= nf * elem_per_reg then return RETIRE_SUCCESS; // no elements are written if vstart >= evl
+  if start_element >= nf * elem_per_reg then {
+    set_vstart(zeros());
+    return RETIRE_SUCCESS // no elements are written if vstart >= evl
+  };
   let elem_to_align : int = start_element % elem_per_reg;
   var cur_field : int = start_element / elem_per_reg;
   var cur_elem  : int = start_element;
