@@ -111,14 +111,15 @@ function pt_walk(
       let pte_flags = Mk_PTE_Flags(pte[7 .. 0]);
       let pte_ext   = ext_bits_of_PTE(pte);
 
-      if pte_is_invalid(pte_flags, pte_ext) then {
+      let ppn = PPN_of_PTE(pte); // 22 or 44.
+
+      if pte_is_invalid(pte_flags, pte_ext) | pte_has_reserved_encoding(pte_flags, pte_ext, ppn, level) then {
         // Step 3 of VATP.
         ptw_fail_callback(PTW_Invalid_PTE(), level, bits_of(pte_addr));
         Err(PTW_Invalid_PTE(), ext_ptw)
       }
       else {
         // Step 4 of VATP.
-        let ppn = PPN_of_PTE(pte); // 22 or 44.
         let global = global | (pte_flags[G] == 0b1);
         if pte_is_non_leaf(pte_flags) then {
           // Non-Leaf PTE
@@ -155,7 +156,9 @@ function pt_walk(
                 let low_bits = ppn_size_bits * level;
                 ppn[length(ppn) - 1 .. low_bits] @ vpn[low_bits - 1 .. 0]
               } else {
-                ppn
+                // 合法 NAPOT 的低 4 位来自 VPN；掩码替换不增加控制分支。
+                let m : bits(4) = replicate_bits(pte_ext[N], 4);
+                [ppn with 3 .. 0 = (ppn[3 .. 0] & ~(m)) | (vpn[3 .. 0] & m)]
               };
               ptw_success_callback(zero_extend(ppn), level);
 

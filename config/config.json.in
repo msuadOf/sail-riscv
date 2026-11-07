@@ -447,6 +447,9 @@
     "Svinval": {
       "supported": true
     },
+    "Svnapot": {
+      "supported": @CONFIG_XLEN_IS_64@
+    },
     "Svrsw60t59b": {
       "supported": @CONFIG_XLEN_IS_64@
     },

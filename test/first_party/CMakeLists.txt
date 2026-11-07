@@ -106,6 +106,8 @@ add_first_party_test("test_pmp_access.c")
 add_first_party_test("test_phys_perms_on_failing_sc.S")
 add_first_party_test("test_v_fixed_rounding.S")
 add_first_party_test("test_vvtype_masked_vxsat.S")
+add_first_party_test_with_config("test_svnapot.S" "rv64gcv_zfbfmin" 64 "no_override.json")
+add_first_party_test_with_config("test_svnapot_disabled.S" "rv64gcv_zfbfmin" 64 "svnapot_disabled.json")
 
 list(LENGTH tests tests_len)
 math(EXPR test_last "${tests_len} - 1")
@@ -125,11 +127,16 @@ foreach(idx RANGE 0 ${test_last} 4)
     set(config "${CMAKE_BINARY_DIR}/config/${arch}_v256_e${xlen}.json")
     set(override_config "${CMAKE_CURRENT_SOURCE_DIR}/src/${override_config}")
 
+    set(included_test_source)
+    if (test_source STREQUAL "test_svnapot_disabled.S")
+        set(included_test_source "src/test_svnapot.S")
+    endif()
+
     set(elf "${arch}_${test_source}.elf")
 
     add_custom_command(
         OUTPUT ${elf}
-        DEPENDS ${common_deps} "src/${test_source}"
+        DEPENDS ${common_deps} "src/${test_source}" ${included_test_source}
         COMMAND ${CROSS_COMPILER_COMMAND_RV${xlen}}
             # The ISA string to compile for.
             # TODO: We should get this from running sail_riscv_sim `--print-isa-string`
