@@ -52,6 +52,16 @@ private function check_mmu_config() -> bool = {
       print_endline("One or more of Sv39/Sv48/Sv57 is enabled: these are not supported on RV32.");
     };
   };
+  if (config extensions.Svpbmt.supported : bool) then {
+    if xlen == 32 then {
+      valid = false;
+      print_endline("Svpbmt is not supported on RV32.");
+    };
+    if not(config extensions.Sv39.supported : bool) then {
+      valid = false;
+      print_endline("Enabling Svpbmt requires Sv39.");
+    };
+  };
   if (config extensions.Svnapot.supported : bool) then {
     if xlen == 32 then {
       valid = false;

@@ -71,9 +71,9 @@ private function pte_is_non_leaf(pte_flags : PTE_Flags) -> bool =
   & pte_flags[W] == 0b0
   & pte_flags[R] == 0b0
 
-// Not supported in the model yet.
+// Svnapot 与 Svpbmt 均要求 RV64 和 Sv39。
 function clause currentlyEnabled(Ext_Svnapot) = hartSupports(Ext_Svnapot) & currentlyEnabled(Ext_Sv39)
-function clause currentlyEnabled(Ext_Svpbmt) = false
+function clause currentlyEnabled(Ext_Svpbmt) = hartSupports(Ext_Svpbmt) & currentlyEnabled(Ext_Sv39)
 
 // Svrsw60t59b: PTE Reserved for software bits 60-59
 function clause currentlyEnabled(Ext_Svrsw60t59b) = hartSupports(Ext_Svrsw60t59b) & currentlyEnabled(Ext_Sv39)
@@ -86,18 +86,21 @@ private function pte_is_invalid(pte_flags : PTE_Flags, pte_ext : PTE_Ext) -> boo
   // Early versions do not require this check. This will need to be behind
   // a flag when the Sail model allows specifying the spec version.
   | (pte_ext[N] != 0b0 & not(currentlyEnabled(Ext_Svnapot)))
-  | (pte_ext[PBMT] != zeros() & not(currentlyEnabled(Ext_Svpbmt)))
+  | (pte_ext[PBMT] != zeros() & (not(currentlyEnabled(Ext_Svpbmt)) | menvcfg[PBMTE] == 0b0))
   | (pte_ext[RSW_60t59b] != zeros() & not(currentlyEnabled(Ext_Svrsw60t59b)))
   | pte_ext[reserved] != zeros()
 
-// 第 3 步：目前只允许最低层、PPN[3:0]=1000 的 64 KiB NAPOT 叶。
+// 第 3 步：非叶 U/A/D/N/PBMT 为保留位；叶检查 NAPOT 与 PBMT 编码。
 private function pte_has_reserved_encoding forall 'n, 'n in {22, 44}. (
-  _pte_flags : PTE_Flags,
+  pte_flags : PTE_Flags,
   pte_ext : PTE_Ext,
   ppn : bits('n),
   level : int,
 ) -> bool =
-  pte_ext[N] == 0b1 & (level != 0 | ppn[3 .. 0] != 0b1000)
+    (pte_is_non_leaf(pte_flags)
+      & (pte_ext[N] @ pte_ext[PBMT] @ pte_flags[D] @ pte_flags[A] @ pte_flags[U]) != zeros())
+  | (pte_ext[N] == 0b1 & (level != 0 | ppn[3 .. 0] != 0b1000))
+  | pte_ext[PBMT] == 0b11
 
 // ----------------
 // Check access permissions in PTE
