@@ -447,6 +447,9 @@
     "Svinval": {
       "supported": true
     },
+    "Svpbmt": {
+      "supported": @CONFIG_XLEN_IS_64@
+    },
     "Svnapot": {
       "supported": @CONFIG_XLEN_IS_64@
     },
