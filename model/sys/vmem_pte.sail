@@ -72,7 +72,7 @@ private function pte_is_non_leaf(pte_flags : PTE_Flags) -> bool =
   & pte_flags[R] == 0b0
 
 // Not supported in the model yet.
-function clause currentlyEnabled(Ext_Svnapot) = false
+function clause currentlyEnabled(Ext_Svnapot) = hartSupports(Ext_Svnapot) & currentlyEnabled(Ext_Sv39)
 function clause currentlyEnabled(Ext_Svpbmt) = false
 
 // Svrsw60t59b: PTE Reserved for software bits 60-59
@@ -89,6 +89,15 @@ private function pte_is_invalid(pte_flags : PTE_Flags, pte_ext : PTE_Ext) -> boo
   | (pte_ext[PBMT] != zeros() & not(currentlyEnabled(Ext_Svpbmt)))
   | (pte_ext[RSW_60t59b] != zeros() & not(currentlyEnabled(Ext_Svrsw60t59b)))
   | pte_ext[reserved] != zeros()
+
+// 第 3 步：目前只允许最低层、PPN[3:0]=1000 的 64 KiB NAPOT 叶。
+private function pte_has_reserved_encoding forall 'n, 'n in {22, 44}. (
+  _pte_flags : PTE_Flags,
+  pte_ext : PTE_Ext,
+  ppn : bits('n),
+  level : int,
+) -> bool =
+  pte_ext[N] == 0b1 & (level != 0 | ppn[3 .. 0] != 0b1000)
 
 // ----------------
 // Check access permissions in PTE
