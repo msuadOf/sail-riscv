@@ -233,9 +233,7 @@ function wX_bits(Regidx(i) : regidx, data : xlenbits) -> unit = {
 }
 
 $ifdef SYMBOLIC
-register x0 : regtype
-
-let GPRs : vector(32, dec, register(xlenbits)) = [
+let GPRs : vector(31, dec, register(xlenbits)) = [
     ref x31,
     ref x30,
     ref x29,
@@ -267,12 +265,11 @@ let GPRs : vector(32, dec, register(xlenbits)) = [
     ref x3,
     ref x2,
     ref x1,
-	ref x0,
 ]
 
 register __isla_vector_gpr: bool = false
 
-val rX_from_vector = monadic "read_register_from_vector" : forall 'n, 0 <= 'n <= 31. (int('n), vector(32, dec, register(xlenbits))) -> xlenbits
+val rX_from_vector = monadic "read_register_from_vector" : (int, vector(31, dec, register(xlenbits))) -> xlenbits
 
 val get_X_bits : regidx -> xlenbits effect {rreg}
 
@@ -280,12 +277,12 @@ val get_X : regno -> xlenbits effect {rreg}
 
 function get_X(Regno(r) : regno) = if __isla_vector_gpr then match r {
     0 => zero_reg,
-    _ => rX_from_vector(r, GPRs),
+    _ => rX_from_vector(r - 1, GPRs),
   } else rX(Regno(r))
 
 function get_X_bits(Regidx(i) : regidx) = if __isla_vector_gpr then get_X(Regno(unsigned(i))) else rX_bits(Regidx(i))
 
-val wX_from_vector = monadic "write_register_from_vector" : forall 'n, 0 <= 'n <= 31. (int('n), xlenbits, vector(32, dec, register(xlenbits))) -> unit
+val wX_from_vector = monadic "write_register_from_vector" : (int, xlenbits, vector(31, dec, register(xlenbits))) -> unit
 
 val set_X_bits : (regidx, xlenbits) -> unit effect {wreg}
 
@@ -294,7 +291,7 @@ val set_X : (regno, xlenbits) -> unit effect {wreg}
 function set_X(Regno(r) : regno, v) = {
     if __isla_vector_gpr then match r {
         0 => (),
-        _ => wX_from_vector(r, v, GPRs),
+        _ => wX_from_vector(r - 1, v, GPRs),
       } else wX(Regno(r), v)
 }
 
