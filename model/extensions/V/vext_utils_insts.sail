@@ -88,9 +88,26 @@ function valid_reg_overlap(rs : vregidx, rd : vregidx, EMUL_pow_rs : int, EMUL_p
 // Check for valid register grouping in vector segment load/store instructions:
 // The EMUL of load vd or store vs3 times the number of fields per segment
 // must not be larger than 8. (EMUL * NFIELDS <= 8)
-function valid_segment(nf : nfields, EMUL_pow : int) -> bool = {
+// [riscv-isa-manual norm:emul_nfields_rsv] "The EMUL setting must be such that
+// EMUL * NFIELDS <= 8, otherwise the instruction encoding is reserved."
+function valid_segment_group_size(nf : nfields, EMUL_pow : int) -> bool = {
   if EMUL_pow < 0 then nf / (2 ^ (0 - EMUL_pow)) <= 8
   else nf * 2 ^ EMUL_pow <= 8
+}
+
+// A segment load/store uses NFIELDS register groups of ceil(EMUL) registers
+// each, starting at reg. If those would run past v31 the encoding is
+// reserved, so check the last register stays in range.
+// [riscv-isa-manual norm:vector_ls_seg_rsv] "If the vector register numbers
+// accessed by the segment load or store would increment past 31, then the
+// instruction encoding is reserved." The manual NOTE to norm:emul_nfields_rsv
+// spells out the ceil accounting: "The product ceil(EMUL) * NFIELDS represents
+// the number of underlying vector registers that will be touched by a
+// segmented load or store instruction" — hence EMUL_reg = 2^max(EMUL_pow, 0).
+// (Port of upstream riscv/sail-riscv PR #1752, which fixes issue #1748.)
+function valid_segment_group_without_overflow(reg : vregidx, nf : nfields, EMUL_pow : int) -> bool = {
+  let EMUL_reg = 2 ^ max(EMUL_pow, 0);
+  unsigned(vregidx_bits(reg)) + nf * EMUL_reg <= 32
 }
 
 /// "VSMUL.VX and VSMUL.VV are not included in EEW=64 in Zve64*."
@@ -199,24 +216,28 @@ function illegal_widening_reduction(EEW : int) -> bool = {
 // g. Non-indexed load instruction check
 function illegal_load(vd : vregidx, vm : bits(1), nf : nfields, EEW : int, EMUL_pow : int) -> bool = {
   not(valid_vtype()) | not(valid_rd_mask(vd, vm)) |
-  not(valid_eew_emul(EEW, EMUL_pow)) | not(valid_segment(nf, EMUL_pow))
+  not(valid_eew_emul(EEW, EMUL_pow)) | not(valid_segment_group_size(nf, EMUL_pow)) |
+  not(valid_segment_group_without_overflow(vd, nf, EMUL_pow))
 }
 
 // h. Non-indexed store instruction check (with vs3 rather than vd)
-function illegal_store(nf : nfields, EEW : int, EMUL_pow : int) -> bool = {
-  not(valid_vtype()) | not(valid_eew_emul(EEW, EMUL_pow)) | not(valid_segment(nf, EMUL_pow))
+function illegal_store(vs3 : vregidx, nf : nfields, EEW : int, EMUL_pow : int) -> bool = {
+  not(valid_vtype()) | not(valid_eew_emul(EEW, EMUL_pow)) | not(valid_segment_group_size(nf, EMUL_pow)) |
+  not(valid_segment_group_without_overflow(vs3, nf, EMUL_pow))
 }
 
 // i. Indexed load instruction check
 function illegal_indexed_load(vd : vregidx, vm : bits(1), nf : nfields, EEW_index : int, EMUL_pow_index : int, EMUL_pow_data : int) -> bool = {
   not(valid_vtype()) | not(valid_rd_mask(vd, vm)) |
-  not(valid_eew_emul(EEW_index, EMUL_pow_index)) | not(valid_segment(nf, EMUL_pow_data))
+  not(valid_eew_emul(EEW_index, EMUL_pow_index)) | not(valid_segment_group_size(nf, EMUL_pow_data)) |
+  not(valid_segment_group_without_overflow(vd, nf, EMUL_pow_data))
 }
 
 // j. Indexed store instruction check (with vs3 rather than vd)
-function illegal_indexed_store(nf : nfields, EEW_index : int, EMUL_pow_index : int, EMUL_pow_data : int) -> bool = {
+function illegal_indexed_store(vs3 : vregidx, nf : nfields, EEW_index : int, EMUL_pow_index : int, EMUL_pow_data : int) -> bool = {
   not(valid_vtype()) | not(valid_eew_emul(EEW_index, EMUL_pow_index)) |
-  not(valid_segment(nf, EMUL_pow_data))
+  not(valid_segment_group_size(nf, EMUL_pow_data)) |
+  not(valid_segment_group_without_overflow(vs3, nf, EMUL_pow_data))
 }
 
 // Scalar register shaping
@@ -270,19 +291,27 @@ function write_velem_quad_vec(vd, SEW, input, i) = {
     write_single_element(SEW, 4 * i + j, vd, input[j]);
 }
 
-// Get the starting element index from csr vtype
-function get_start_element() -> result(nat, unit) = {
-  let start_element = unsigned(vstart);
-  let SEW_pow = get_sew_pow();
-  // The use of vstart values greater than the largest element
-  // index for the current SEW setting is reserved.
-  //
-  // TODO: the bound here might be incorrect.
-  // See https://github.com/riscv/sail-riscv/pull/755#discussion_r2035095825
-  if start_element > (2 ^ (3 + vlen_exp - SEW_pow) - 1)
-  then Err(())
-  else Ok(start_element)
-}
+// Get the starting element index from the vstart CSR.
+//
+// [riscv-isa-manual norm:vstart_val_rsv] "The use of vstart values greater
+// than the largest element index for the current vtype setting is reserved.",
+// with the NOTE: "It is recommended that implementations trap if vstart is
+// out of bounds. It is not required to trap, as a possible future use of
+// upper vstart bits is to store imprecise trap information."
+//
+// We adopt the non-trapping reading (the "Vstart_Ignore" direction of
+// upstream riscv/sail-riscv PR #1744, which resolved the old TODO below):
+// an out-of-bounds vstart simply makes every element prestart, so the
+// instruction writes nothing and retires — matching the XiangShan/NEMU
+// difftest environment this model is replayed against (emu retires OOB
+// vstart loads/stores; XiangShan VecExceptionGen has no vstart check for
+// load/store instructions).
+//
+// The historical bound here was 2^(3+vlen_exp-SEW_pow)-1, i.e. VLMAX at the
+// largest LMUL — not VLMAX of the *current* vtype. It was both wrong per
+// the norm text above and turned a reserved value into an
+// illegal-instruction exception. Callers no longer need to handle Err.
+function get_start_element() -> nat = unsigned(vstart)
 
 // Get the ending element index from csr vl
 function get_end_element() -> int = unsigned(vl) - 1
@@ -298,10 +327,7 @@ val init_masked_result_default : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), i
 function init_masked_result_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
   assert_vector_num_elem(num_elem);
   assert_lmul_pow(LMUL_pow);
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Err(())
-  };
+  let start_element : nat = get_start_element();
   let end_element   = get_end_element();
 
   // Determine the actual number of elements when lmul < 1
@@ -361,10 +387,7 @@ $ifdef SYMBOLIC
 function init_masked_result(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
   assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
-    let start_element : nat = match get_start_element() {
-      Ok(v)   => v,
-      Err(()) => return Err(())
-    };
+    let start_element : nat = get_start_element();
     let end_element   = get_end_element();
     let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
     assert(num_elem >= real_num_elem);
@@ -400,10 +423,7 @@ val init_masked_source : forall 'n 'p, 'n > 0. (int('n), int('p), bits('n)) -> r
 function init_masked_source(num_elem, LMUL_pow, vm_val) = {
   assert_vector_num_elem(num_elem);
   assert_lmul_pow(LMUL_pow);
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Err(())
-  };
+  let start_element : nat = get_start_element();
   let end_element   = get_end_element();
   var mask : bits('n) = undefined;
 
@@ -439,10 +459,7 @@ val init_masked_result_carry_default : forall 'n, 'n >= 0 . (int('n), sew_bitsiz
 function init_masked_result_carry_default(num_elem, _EEW, LMUL_pow, vd_val) = {
   assert_vector_num_elem(num_elem);
   assert_lmul_pow(LMUL_pow);
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Err(())
-  };
+  let start_element : nat = get_start_element();
   let end_element   = get_end_element();
 
   // Determine the actual number of elements when lmul < 1
@@ -481,10 +498,7 @@ $ifdef SYMBOLIC
 function init_masked_result_carry(num_elem, EEW, LMUL_pow, vd_val) = {
   assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
-    let start_element : nat = match get_start_element() {
-      Ok(v)   => v,
-      Err(()) => return Err(())
-    };
+    let start_element : nat = get_start_element();
     let end_element   = get_end_element();
     let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
     assert(num_elem >= real_num_elem);
@@ -503,10 +517,7 @@ val init_masked_result_cmp_default : forall 'n, 'n >= 0 . (int('n), sew_bitsize,
 function init_masked_result_cmp_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val) = {
   assert_vector_num_elem(num_elem);
   assert_lmul_pow(LMUL_pow);
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Err(())
-  };
+  let start_element : nat = get_start_element();
   let end_element   = get_end_element();
 
   // Determine the actual number of elements when lmul < 1
@@ -553,10 +564,7 @@ $ifdef SYMBOLIC
 function init_masked_result_cmp(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
   assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
-    let start_element : nat = match get_start_element() {
-      Ok(v)   => v,
-      Err(()) => return Err(())
-    };
+    let start_element : nat = get_start_element();
     let end_element   = get_end_element();
     let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
     assert(num_elem >= real_num_elem);

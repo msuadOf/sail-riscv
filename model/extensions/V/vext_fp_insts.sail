@@ -1332,10 +1332,7 @@ mapping clause encdec = VFMERGE(vs2, rs1, vd)
 
 function clause execute VFMERGE(vs2, rs1, vd) = {
   let rm_3b         = fcsr[FRM];
-  let start_element : nat = match get_start_element() {
-    Ok(v)   => v,
-    Err(()) => return Illegal_Instruction()
-  };
+  let start_element : nat = get_start_element();
   let end_element   = get_end_element();
   let SEW           = get_sew();
   let LMUL_pow      = get_lmul_pow();

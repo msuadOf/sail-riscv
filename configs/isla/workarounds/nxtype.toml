@@ -10,9 +10,9 @@ on_limit_reached = "concretize"
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
-start_line = 778
+start_line = 775
 start_column = 4
-end_line = 792
+end_line = 789
 end_column = 5
 
 # 每个活跃 lane 都会调用 get_fixed_rounding_incr。限制 foreach 后的中间验收在一分钟内
@@ -20,9 +20,9 @@ end_column = 5
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 612
+start_line = 620
 start_column = 2
-end_line = 634
+end_line = 642
 end_column = 1
 
 # rounding_mode match 的第一条 IR 分支是 `jump @not(rounding_mode == 0b00)`。
@@ -33,7 +33,7 @@ max_forks_per_region = 1
 sample_bias = 65536
 sample_bias_direction = "jump"
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 626
+start_line = 634
 start_column = 4
-end_line = 631
+end_line = 639
 end_column = 5

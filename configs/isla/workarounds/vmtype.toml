@@ -9,10 +9,11 @@ on_limit_reached = "concretize"
 # 修复 sys_pmp_count 配置应用后，60 秒 ITRACE 基线完成 421 条路径。
 # PMP 检查均走 count=0 早退，唯一 clause 私有热点为 661:2-682:3 的 foreach。
 # 649-651 是循环外 encdec，不限制；Region 使用半开区间 [661:2,682:3)。
+# 当前模型补齐全寄存器访存早退清零后，process_vm 循环迁移到 [658:2,679:3)。
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_mem_insts.sail"
-start_line = 661
+start_line = 658
 start_column = 2
-end_line = 682
+end_line = 679
 end_column = 3
