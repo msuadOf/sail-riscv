@@ -150,3 +150,30 @@ function prefix_popcount(input, width) = {
   result
 }
 $endif
+
+
+// 保序打包：q选中的src元素从下标0连续写入，剩余位置保留old。
+$ifdef SYMBOLIC
+val stable_pack = pure "stable_pack" :
+  forall 'n 'w, 'n >= 0 & 'w > 0. (bits('n), vector('n, bits('w)), vector('n, bits('w))) -> vector('n, bits('w))
+$else
+val stable_pack :
+  forall 'n 'w, 'n >= 0 & 'w > 0. (bits('n), vector('n, bits('w)), vector('n, bits('w))) -> vector('n, bits('w))
+function stable_pack(q, src, old) = {
+  var result : vector('n, bits('w)) = old;
+  var count : nat = 0;
+  foreach (i from 0 to ('n - 1)) {
+    if q[i] == 0b1 then {
+      let 'p = count;
+      assert('p < 'n);
+      result['p] = src[i];
+      count = count + 1;
+    }
+  };
+  if count < 'n then {
+    let 'p = count;
+    foreach (i from 'p to ('n - 1)) { result[i] = old[i] }
+  };
+  result
+}
+$endif

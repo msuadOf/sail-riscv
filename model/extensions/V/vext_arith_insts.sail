@@ -2072,31 +2072,9 @@ function clause execute MVVCOMPRESS(vs2, vs1, vd) = {
   let vs1_val : bits('n)             = read_vmask(num_elem, 0b0, vs1);
   let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
-  var result  : vector('n, bits('m)) = vector_init(zeros());
-
-  // body elements
-  var vd_idx : nat = 0;
-  foreach (i from 0 to (num_elem - 1)) {
-    if i <= end_element then {
-      if vs1_val[i] == 0b1 then {
-        let 'p = vd_idx;
-        assert('p < 'n);
-        result['p] = vs2_val[i];
-        vd_idx = vd_idx + 1;
-      }
-    }
-  };
-  // tail elements
-  if vd_idx < num_elem then {
-    let tail_ag : agtype = get_vtype_vta();
-    let 'p = vd_idx;
-    foreach (i from 'p to (num_elem - 1)) {
-      result[i] = match tail_ag {
-        UNDISTURBED => vd_val[i],
-        AGNOSTIC    => vd_val[i] // TODO: configuration support
-      }
-    }
-  };
+  // 第i位仅在i<=end_element时有效；vl为0时q为全零。
+  let q = vs1_val & ~(ones('n) << (end_element + 1));
+  let result = stable_pack(q, vs2_val, vd_val);
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
   set_vstart(zeros());
