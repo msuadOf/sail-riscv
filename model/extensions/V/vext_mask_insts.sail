@@ -330,12 +330,9 @@ function clause execute VIOTA_M(vm, vs2, vd) = {
   };
   var result = initial_result;
 
-  var sum : int = 0;
+  let prefix = prefix_popcount(mask & vs2_val, SEW);
   foreach (i from 0 to (num_elem - 1)) {
-    if mask[i] == 0b1 then {
-      result[i] = to_bits_unsafe(SEW, sum);
-      if vs2_val[i] == 0b1 then sum = sum + 1
-    }
+    if mask[i] == 0b1 then result[i] = prefix[i]
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);

@@ -90,9 +90,16 @@ let zvksed_ck : vector(32, bits(32)) = [
   0x10171E25, 0x2C333A41, 0x484F565D, 0x646B7279,
 ]
 
-function zvksed_box_lookup(x : bits(5), table : vector(32, bits(32))) -> bits(32) = {
+val zvksed_box_lookup : (bits(5), vector(32, bits(32))) -> bits(32)
+$ifdef SYMBOLIC
+function zvksed_box_lookup(x, table) = {
+  lookup_bits(~(x), table)
+}
+$else
+function zvksed_box_lookup(x, table) = {
   table[31 - unsigned(x)]
 }
+$endif
 
 function zvk_sm4_sbox(x : bits(5)) -> bits(32) = zvksed_box_lookup(x, zvksed_ck)
 

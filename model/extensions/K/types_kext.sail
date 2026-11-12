@@ -178,9 +178,16 @@ let aes_sbox_inv_table : vector(256, bits(8)) = [
 /// Lookup function - takes an index and a table, and retrieves the
 /// x'th element of that table. Note that the Sail vector literals
 /// start at index 255, and go down to 0.
-function sbox_lookup(x : bits(8), table : vector(256, bits(8))) -> bits(8) = {
+val sbox_lookup : (bits(8), vector(256, bits(8))) -> bits(8)
+$ifdef SYMBOLIC
+function sbox_lookup(x, table) = {
+  lookup_bits(~(x), table)
+}
+$else
+function sbox_lookup(x, table) = {
   table[255 - unsigned(x)]
 }
+$endif
 
 /// Easy function to perform a forward AES SBox operation on 1 byte.
 function aes_sbox_fwd(x : bits(8)) -> bits(8) = sbox_lookup(x, aes_sbox_fwd_table)

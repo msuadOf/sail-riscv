@@ -128,3 +128,25 @@ function count_ones(x) = {
 $else
 val count_ones = pure "isla_count_ones" : forall 'n, 'n >= 0. (bits('n)) -> range(0, 'n)
 $endif
+
+$ifdef SYMBOLIC
+// 全域有限表：K位索引选择2^K个同宽表项，下标0对应索引0。
+val lookup_bits = pure "lookup_bits" :
+  forall 'k 'w, 'k > 0 & 'w > 0. (bits('k), vector(2 ^ 'k, bits('w))) -> bits('w)
+
+// Exclusive前缀：第i项计数输入中下标小于i的置位，按输出位宽截断。
+val prefix_popcount = pure "prefix_popcount" :
+  forall 'n 'm, 'n >= 0 & 'm > 0. (bits('n), int('m)) -> vector('n, bits('m))
+$else
+val prefix_popcount :
+  forall 'n 'm, 'n >= 0 & 'm > 0. (bits('n), int('m)) -> vector('n, bits('m))
+function prefix_popcount(input, width) = {
+  var result : vector('n, bits('m)) = vector_init(zeros());
+  var sum : int = 0;
+  foreach (i from 0 to ('n - 1)) {
+    result[i] = to_bits_unsafe(width, sum);
+    if input[i] == 0b1 then sum = sum + 1
+  };
+  result
+}
+$endif
