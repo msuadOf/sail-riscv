@@ -793,11 +793,17 @@ function clause write_CSR(0x7a0, value) = { tselect = value; Ok(tselect) }
 // appears _after_ this one in the compile order meaning the valspec
 // for this function is unavailable when it's first encountered in
 // read_seed_csr. Hence it appears here.
+$ifdef SYMBOLIC
+// 符号模型的每次读取提供独立的 16 位未定义值。
+val get_16_random_bits : unit -> bits(16)
+function get_16_random_bits() = undefined_bitvector(16)
+$else
 val get_16_random_bits = impure {
     interpreter: "Platform.get_16_random_bits",
     cpp: "plat_get_16_random_bits",
     lem: "plat_get_16_random_bits"
 } : unit -> bits(16)
+$endif
 
 
 // There are several features that are controlled by machine/supervisor enable
