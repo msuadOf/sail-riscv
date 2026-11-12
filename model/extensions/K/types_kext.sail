@@ -87,7 +87,21 @@ function aes_mixcolumn_inv(x : bits(32)) -> bits(32) = {
 /// do not decode to the AES64KS1I instruction. The 0xA case is used
 /// specifically for the AES-256 KeySchedule, and this function is never
 /// called in that case.
-function aes_decode_rcon(r : bits(4)) -> bits(32) = {
+val aes_decode_rcon : bits(4) -> bits(32)
+$ifdef SYMBOLIC
+function aes_decode_rcon(r) = {
+  assert(r <_u 0xA);
+  // 与普通构建的十个分支逐项相同；其余六项位于断言排除的域。
+  let table : vector(16, bits(32)) = [
+    0x00000001, 0x00000002, 0x00000004, 0x00000008,
+    0x00000010, 0x00000020, 0x00000040, 0x00000080,
+    0x0000001b, 0x00000036, 0x00000000, 0x00000000,
+    0x00000000, 0x00000000, 0x00000000, 0x00000000
+  ];
+  lookup_bits(~(r), table)
+}
+$else
+function aes_decode_rcon(r) = {
   assert(r <_u 0xA);
   match r {
     0x0 => 0x00000001,
@@ -103,6 +117,8 @@ function aes_decode_rcon(r : bits(4)) -> bits(32) = {
     _   => internal_error(__FILE__, __LINE__, "Unexpected AES r") // unreachable -- required to silence Sail warning
   }
 }
+
+$endif
 
 /// SM4 SBox - only one sbox for forwards and inverse.
 $anchor sm4_sbox_table_doc
