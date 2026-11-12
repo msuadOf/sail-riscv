@@ -21,5 +21,5 @@ sample_bias_direction = "fallthrough"
 file = "extensions/vector_crypto/zvkg_insts.sail"
 start_line = 38
 start_column = 2
-end_line = 57
+end_line = 49
 end_column = 3

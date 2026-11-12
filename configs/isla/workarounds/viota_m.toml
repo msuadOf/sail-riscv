@@ -13,9 +13,9 @@ max_forks_per_region = 1
 sample_bias = 256
 sample_bias_direction = "fallthrough"
 file = "extensions/V/vext_mask_insts.sail"
-start_line = 340
+start_line = 337
 start_column = 6
-end_line = 340
+end_line = 337
 end_column = 45
 
 # 超时路径的主要 SMT 调用点是完整循环与外层 mask 判断；半开区间
@@ -23,7 +23,7 @@ end_column = 45
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/V/vext_mask_insts.sail"
-start_line = 337
+start_line = 334
 start_column = 2
-end_line = 342
+end_line = 339
 end_column = 3

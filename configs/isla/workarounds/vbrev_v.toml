@@ -14,5 +14,5 @@ max_forks_per_region = 1
 file = "extensions/vector_crypto/zvbb_insts.sail"
 start_line = 129
 start_column = 2
-end_line = 136
+end_line = 133
 end_column = 4

@@ -108,10 +108,7 @@ function clause execute VCPOP_M(vm, vs2, rd) = {
     Err(()) => return Illegal_Instruction()
   };
 
-  var count : nat = 0;
-  foreach (i from 0 to (num_elem - 1)) {
-    if (mask & vs2_val)[i] == 0b1 then count = count + 1;
-  };
+  let count = count_ones(mask & vs2_val);
 
   X(rd) = to_bits_unsafe(xlen, count);
   set_vstart(zeros());

@@ -17,19 +17,33 @@
 // ----------------------------------------------------------------------
 
 /// Auxiliary function for performing GF multiplication.
-function xt2(x : bits(8)) -> bits(8) = {
+val xt2 : bits(8) -> bits(8)
+$ifdef SYMBOLIC
+function xt2 (x) = {
+  gf2_poly_mul_mod(x, 0x02, 0x1b)
+}
+$else
+function xt2 (x) = {
   (x << 1) ^ (if bit_to_bool(x[7]) then 0x1b else 0x00)
 }
+$endif
 
 function xt3(x : bits(8)) -> bits(8) = x ^ xt2(x)
 
 /// Multiply 8-bit field element by 4-bit value for AES MixCols step.
-function gfmul(x : bits(8), y : bits(4)) -> bits(8) = {
+val gfmul : (bits(8), bits(4)) -> bits(8)
+$ifdef SYMBOLIC
+function gfmul (x, y) = {
+  gf2_poly_mul_mod(x, zero_extend(y), 0x1b)
+}
+$else
+function gfmul (x, y) = {
   (if bit_to_bool(y[0]) then             x    else 0x00) ^
   (if bit_to_bool(y[1]) then xt2(        x)   else 0x00) ^
   (if bit_to_bool(y[2]) then xt2(xt2(    x))  else 0x00) ^
   (if bit_to_bool(y[3]) then xt2(xt2(xt2(x))) else 0x00)
 }
+$endif
 
 /// 8-bit to 32-bit partial AES Mix Column - forwards.
 function aes_mixcolumn_byte_fwd(so : bits(8)) -> bits(32) = {

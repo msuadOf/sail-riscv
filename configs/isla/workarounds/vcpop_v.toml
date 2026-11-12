@@ -16,9 +16,9 @@ max_forks_per_region = 1
 sample_bias = 256
 sample_bias_direction = "fallthrough"
 file = "extensions/vector_crypto/zvbb_insts.sail"
-start_line = 347
+start_line = 344
 start_column = 8
-end_line = 349
+end_line = 346
 end_column = 9
 
 # 半开区间 [344:2,351:4) 覆盖完整双层循环，压制外层 mask 与内层分支爆炸；
@@ -26,7 +26,7 @@ end_column = 9
 [[execution_limits.region_fork_limits]]
 max_forks_per_region = 1
 file = "extensions/vector_crypto/zvbb_insts.sail"
-start_line = 344
+start_line = 341
 start_column = 2
-end_line = 351
+end_line = 348
 end_column = 4

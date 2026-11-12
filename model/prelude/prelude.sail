@@ -205,6 +205,9 @@ function rotate_bits_left (value, shift) = rotatel(value, unsigned(shift))
 overload operator >>> = {rotate_bits_right, rotater}
 overload operator <<< = {rotate_bits_left, rotatel}
 
+$ifdef SYMBOLIC
+val reverse_bits = pure "isla_reverse_bits" : forall 'n, 'n > 0. bits('n) -> bits('n)
+$else
 val reverse_bits : forall 'n, 'n > 0. bits('n) -> bits('n)
 function reverse_bits (xs)  = {
   var ys : bits('n) = zeros();
@@ -212,6 +215,7 @@ function reverse_bits (xs)  = {
     ys[i] = xs['n - 1 - i];
   ys
 }
+$endif
 
 overload operator * = {mult_atom, mult_int}
 // quot_round_zero and rem_round_zero are deliberately not

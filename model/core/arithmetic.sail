@@ -9,12 +9,27 @@
 $ifdef SYMBOLIC
 register __isla_use_extra_ops : bool = false
 
-val isla_carryless_mul = pure "isla_carryless_mul" : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits(2 * 'n)
-val isla_carryless_mulr = pure "isla_carryless_mulr" : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits('n)
-val isla_count_ones = pure "isla_count_ones" : forall 'n, 'n >= 0. bits('n) -> range(0, 'n)
+// 通用商环乘法：模数为X^W+r，r须为调用处的常量；当前Isla支持1..128位。
+val gf2_poly_mul_mod = pure "gf2_poly_mul_mod" : forall 'n, 1 <= 'n <= 128. (bits('n), bits('n), bits('n)) -> bits('n)
+$else
+val gf2_poly_mul_mod : forall 'n, 1 <= 'n <= 128. (bits('n), bits('n), bits('n)) -> bits('n)
+function gf2_poly_mul_mod(a, b, r) = {
+  var Z : bits('n) = zeros();
+  var H : bits('n) = b;
+  foreach (i from 0 to ('n - 1)) {
+    if a[i] == 0b1 then Z = Z ^ H;
+    let reduce = H['n - 1] == 0b1;
+    H = H << 1;
+    if reduce then H = H ^ r;
+  };
+  Z
+}
 $endif
 
 // Reverse bits in each byte
+$ifdef SYMBOLIC
+val brev8 = pure "isla_brev8" : forall 'm, 'm >= 0 & mod('m, 8) == 0. (bits('m)) -> bits('m)
+$else
 val brev8 : forall 'm, 'm >= 0 & mod('m, 8) == 0. (bits('m)) -> bits('m)
 function brev8(input) = {
   var output : bits('m) = zeros();
@@ -22,6 +37,7 @@ function brev8(input) = {
     output[i+7..i] = reverse_bits(input[i+7..i]);
   output
 }
+$endif
 
 // Carry-less multiply.
 $ifndef SYMBOLIC
@@ -35,20 +51,7 @@ function carryless_mul(a, b) = {
   result
 }
 $else
-val carryless_mul_default : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits(2 * 'n)
-function carryless_mul_default(a, b) = {
-  var result : bits(2 * 'n) = zeros();
-  foreach (i from 0 to ('n - 1)) {
-    if   a[i] == 0b1
-    then result = result ^ (zero_extend(b) << i);
-  };
-  result
-}
-
-val carryless_mul : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits(2 * 'n)
-function carryless_mul(a, b) =
-  if __isla_use_extra_ops then isla_carryless_mul(a, b)
-  else carryless_mul_default(a, b)
+val carryless_mul = pure "isla_carryless_mul" : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits(2 * 'n)
 $endif
 
 // Reverse carry-less multiply.
@@ -63,20 +66,7 @@ function carryless_mulr(a, b) = {
   result
 }
 $else
-val carryless_mulr_default : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits('n)
-function carryless_mulr_default(a, b) = {
-  var result : bits('n) = zeros();
-  foreach (i from 0 to ('n - 1)) {
-    if   a[i] == 0b1
-    then result = result ^ (b >> ('n - i - 1));
-  };
-  result
-}
-
-val carryless_mulr : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits('n)
-function carryless_mulr(a, b) =
-  if __isla_use_extra_ops then isla_carryless_mulr(a, b)
-  else carryless_mulr_default(a, b)
+val carryless_mulr = pure "isla_carryless_mulr" : forall 'n, 'n > 0. (bits('n), bits('n)) -> bits('n)
 $endif
 
 // Equivalent reverse carry-less multiply.
@@ -109,6 +99,9 @@ function cmulr_equivalence(a : bits(16), b : bits(16)) -> bool = {
   carryless_mul_reversed(a, b) == carryless_mulr(a, b)
 }
 
+$ifdef SYMBOLIC
+val rev8 = pure "isla_rev8" : forall 'm, 'm >= 0 & mod('m, 8) == 0. (bits('m)) -> bits('m)
+$else
 val rev8 : forall 'm, 'm >= 0 & mod('m, 8) == 0. (bits('m)) -> bits('m)
 function rev8(input) = {
   var output : bits('m) = zeros();
@@ -117,6 +110,7 @@ function rev8(input) = {
   };
   output
 }
+$endif
 
 $ifndef SYMBOLIC
 val count_ones : forall 'n, 'n >= 0. (bits('n)) -> range(0, 'n)
@@ -132,21 +126,5 @@ function count_ones(x) = {
   count
 }
 $else
-val count_ones_default : forall 'n, 'n >= 0. (bits('n)) -> range(0, 'n)
-function count_ones_default(x) = {
-  var count : range(0, 'n) = 0;
-  foreach (i from 0 to ('n - 1)) {
-    if x[i] == 0b1 then {
-      let new_count = count + 1;
-      assert(new_count <= 'n);
-      count = new_count;
-    }
-  };
-  count
-}
-
-val count_ones : forall 'n, 'n >= 0. (bits('n)) -> range(0, 'n)
-function count_ones(x) =
-  if __isla_use_extra_ops then isla_count_ones(x)
-  else count_ones_default(x)
+val count_ones = pure "isla_count_ones" : forall 'n, 'n >= 0. (bits('n)) -> range(0, 'n)
 $endif

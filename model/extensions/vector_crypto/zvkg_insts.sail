@@ -40,18 +40,10 @@ function clause execute VGHSH_VV(vs2, vs1, vd) = {
 
     let Y : bits(128) = get_velem_quad(vd_val, i);
     let X : bits(128) = get_velem_quad(vs1_val, i);
-    var H : bits(128) = brev8(get_velem_quad(vs2_val, i));
+    let H : bits(128) = brev8(get_velem_quad(vs2_val, i));
 
-    var Z : bits(128) = zeros();
     let S : bits(128) = brev8(Y ^ X);
-
-    foreach (b from 0 to 127) {
-      if S[b] == 0b1 then Z = Z ^ H;
-
-      let reduce = H[127] == 0b1;
-      H = H << 1;
-      if reduce then H = H[127..8] @ (H[7..0] ^ 0x87);
-    };
+    let Z : bits(128) = gf2_poly_mul_mod(S, H, 0x00000000000000000000000000000087);
 
     write_velem_quad(vd, SEW, brev8(Z), i);
   };
@@ -92,16 +84,8 @@ function clause execute VGMUL_VV(vs2, vd) = {
     assert(i * 4 + 3 < num_elem);
 
     let Y : bits(128) = brev8(get_velem_quad(vd_val, i));
-    var H : bits(128) = brev8(get_velem_quad(vs2_val, i));
-    var Z : bits(128) = zeros();
-
-    foreach (b from 0 to 127) {
-      if Y[b] == 0b1 then Z = Z ^ H;
-
-      let reduce = H[127] == 0b1;
-      H = H << 1;
-      if reduce then H = H[127..8] @ (H[7..0] ^ 0x87);
-    };
+    let H : bits(128) = brev8(get_velem_quad(vs2_val, i));
+    let Z : bits(128) = gf2_poly_mul_mod(Y, H, 0x00000000000000000000000000000087);
 
     write_velem_quad(vd, SEW, brev8(Z), i);
   };

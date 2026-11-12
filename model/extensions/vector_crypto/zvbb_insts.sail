@@ -128,10 +128,7 @@ function clause execute VBREV_V(vm, vs2, vd) = {
 
   foreach (i from 0 to (num_elem - 1)) {
     if mask[i] == 0b1 then {
-      var output : bits('m) = zeros();
-      foreach (j from 0 to (SEW - 1))
-        output[SEW - 1 - j] = vs2_val[i][j];
-      result[i] = output;
+      result[i] = reverse_bits(vs2_val[i]);
     };
   };
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
