@@ -1276,8 +1276,8 @@ mapping clause encdec = VISG(funct6, vm, vs2, simm, vd)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
 // 仅选择数据值：32项表覆盖5位立即数的整个域，不改变输入或架构状态。
-val visg_element_data : forall 'n 'm, 'n >= 0 & 'm > 0.
-  (int('n), int('m), visgfunct6, int, bits(5), LMUL_pow, SEW_pow, vector('n, bits('m)), vector('n, bits('m))) -> bits('m)
+val visg_element_data : forall 'n 'm, 'n > 0 & 'm > 0.
+  (int('n), int('m), visgfunct6, range(0, 'n - 1), bits(5), LMUL_pow, SEW_pow, vector('n, bits('m)), vector('n, bits('m))) -> bits('m)
 $ifdef SYMBOLIC
 function visg_element_data(num_elem, SEW, funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val) = {
   var choices : vector(32, bits('m)) = vector_init(zeros(SEW));
