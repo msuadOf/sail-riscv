@@ -1309,6 +1309,33 @@ function clause execute VISG(funct6, vm, vs2, simm, vd) = {
   };
   var result = initial_result;
 
+  // 5位立即数的全部32种结果；纯数据选择交给已有全域查表原语。
+  // 普通Sail仍用原表达式，非法检查、活动mask和寄存器写回不变。
+$ifdef SYMBOLIC
+  foreach (i from 0 to (num_elem - 1)) {
+    var choices : vector(32, bits('m)) = vector_init(zeros());
+    foreach (offset from 0 to 31) {
+      choices[offset] = match funct6 {
+        VI_VSLIDEUP    => {
+                            if i >= offset then vs2_val[i - offset] else vd_val[i]
+                          },
+        VI_VSLIDEDOWN  => {
+                            assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+                            let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+                            assert(VLMAX > 0 & VLMAX <= 'n);
+                            if i + offset < VLMAX then vs2_val[i + offset] else zeros()
+                          },
+        VI_VRGATHER    => {
+                            assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+                            let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+                            assert(VLMAX > 0 & VLMAX <= 'n);
+                            if offset < VLMAX then vs2_val[offset] else zeros()
+                          }
+      }
+    };
+    result[i] = masked_select(mask[i], lookup_bits(simm, choices), result[i])
+  };
+$else
   foreach (i from 0 to (num_elem - 1)) {
     result[i] = masked_select(mask[i], match funct6 {
         VI_VSLIDEUP    => {
@@ -1328,6 +1355,7 @@ function clause execute VISG(funct6, vm, vs2, simm, vd) = {
                           }
       }, result[i])
   };
+$endif
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
   set_vstart(zeros());
