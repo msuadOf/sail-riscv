@@ -1275,6 +1275,56 @@ mapping clause encdec = VISG(funct6, vm, vs2, simm, vd)
   when (currentlyEnabled(Ext_Zve32x) & get_sew() <= 32)
      | (currentlyEnabled(Ext_Zve64x) & get_sew() <= 64)
 
+// 仅选择数据值：32项表覆盖5位立即数的整个域，不改变输入或架构状态。
+val visg_element_data : forall 'n 'm, 'n >= 0 & 'm > 0.
+  (visgfunct6, int, bits(5), int, int, vector('n, bits('m)), vector('n, bits('m))) -> bits('m)
+$ifdef SYMBOLIC
+function visg_element_data(funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val) = {
+  var choices : vector(32, bits('m)) = vector_init(zeros());
+  foreach (offset from 0 to 31) {
+    choices[offset] = match funct6 {
+        VI_VSLIDEUP    => {
+                            if i >= offset then vs2_val[i - offset] else vd_val[i]
+                          },
+        VI_VSLIDEDOWN  => {
+                            assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+                            let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+                            assert(VLMAX > 0 & VLMAX <= 'n);
+                            if i + offset < VLMAX then vs2_val[i + offset] else zeros()
+                          },
+        VI_VRGATHER    => {
+                            assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+                            let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+                            assert(VLMAX > 0 & VLMAX <= 'n);
+                            if offset < VLMAX then vs2_val[offset] else zeros()
+                          }
+      }
+  };
+  lookup_bits(simm, choices)
+}
+$else
+function visg_element_data(funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val) = {
+  let imm_val : nat = unsigned(zero_extend(xlen, simm));
+  match funct6 {
+        VI_VSLIDEUP    => {
+                            if i >= imm_val then vs2_val[i - imm_val] else vd_val[i]
+                          },
+        VI_VSLIDEDOWN  => {
+                            assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+                            let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+                            assert(VLMAX > 0 & VLMAX <= 'n);
+                            if i + imm_val < VLMAX then vs2_val[i + imm_val] else zeros()
+                          },
+        VI_VRGATHER    => {
+                            assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
+                            let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
+                            assert(VLMAX > 0 & VLMAX <= 'n);
+                            if imm_val < VLMAX then vs2_val[imm_val] else zeros()
+                          }
+      }
+}
+$endif
+
 function clause execute VISG(funct6, vm, vs2, simm, vd) = {
   let SEW_pow  = get_sew_pow();
   let SEW      = get_sew();
@@ -1299,7 +1349,6 @@ function clause execute VISG(funct6, vm, vs2, simm, vd) = {
   let 'm = SEW;
 
   let vm_val  : bits('n)             = read_vmask(num_elem, vm, zvreg);
-  let imm_val : nat                  = unsigned(zero_extend(xlen, simm));
   let vs2_val : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  : vector('n, bits('m)) = read_vreg(num_elem, SEW, LMUL_pow, vd);
 
@@ -1309,53 +1358,9 @@ function clause execute VISG(funct6, vm, vs2, simm, vd) = {
   };
   var result = initial_result;
 
-  // 5位立即数的全部32种结果；纯数据选择交给已有全域查表原语。
-  // 普通Sail仍用原表达式，非法检查、活动mask和寄存器写回不变。
-$ifdef SYMBOLIC
   foreach (i from 0 to (num_elem - 1)) {
-    var choices : vector(32, bits('m)) = vector_init(zeros());
-    foreach (offset from 0 to 31) {
-      choices[offset] = match funct6 {
-        VI_VSLIDEUP    => {
-                            if i >= offset then vs2_val[i - offset] else vd_val[i]
-                          },
-        VI_VSLIDEDOWN  => {
-                            assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
-                            let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
-                            assert(VLMAX > 0 & VLMAX <= 'n);
-                            if i + offset < VLMAX then vs2_val[i + offset] else zeros()
-                          },
-        VI_VRGATHER    => {
-                            assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
-                            let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
-                            assert(VLMAX > 0 & VLMAX <= 'n);
-                            if offset < VLMAX then vs2_val[offset] else zeros()
-                          }
-      }
-    };
-    result[i] = masked_select(mask[i], lookup_bits(simm, choices), result[i])
+    result[i] = masked_select(mask[i], visg_element_data(funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val), result[i])
   };
-$else
-  foreach (i from 0 to (num_elem - 1)) {
-    result[i] = masked_select(mask[i], match funct6 {
-        VI_VSLIDEUP    => {
-                            if i >= imm_val then vs2_val[i - imm_val] else vd_val[i]
-                          },
-        VI_VSLIDEDOWN  => {
-                            assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
-                            let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
-                            assert(VLMAX > 0 & VLMAX <= 'n);
-                            if i + imm_val < VLMAX then vs2_val[i + imm_val] else zeros()
-                          },
-        VI_VRGATHER    => {
-                            assert(LMUL_pow + vlen_exp - SEW_pow >= 0);
-                            let VLMAX = 2 ^ (LMUL_pow + vlen_exp - SEW_pow);
-                            assert(VLMAX > 0 & VLMAX <= 'n);
-                            if imm_val < VLMAX then vs2_val[imm_val] else zeros()
-                          }
-      }, result[i])
-  };
-$endif
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
   set_vstart(zeros());
