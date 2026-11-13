@@ -1277,10 +1277,10 @@ mapping clause encdec = VISG(funct6, vm, vs2, simm, vd)
 
 // 仅选择数据值：32项表覆盖5位立即数的整个域，不改变输入或架构状态。
 val visg_element_data : forall 'n 'm, 'n >= 0 & 'm > 0.
-  (visgfunct6, int, bits(5), int, int, vector('n, bits('m)), vector('n, bits('m))) -> bits('m)
+  (int('n), int('m), visgfunct6, int, bits(5), LMUL_pow, SEW_pow, vector('n, bits('m)), vector('n, bits('m))) -> bits('m)
 $ifdef SYMBOLIC
-function visg_element_data(funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val) = {
-  var choices : vector(32, bits('m)) = vector_init(zeros());
+function visg_element_data(num_elem, SEW, funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val) = {
+  var choices : vector(32, bits('m)) = vector_init(zeros(SEW));
   foreach (offset from 0 to 31) {
     choices[offset] = match funct6 {
         VI_VSLIDEUP    => {
@@ -1303,7 +1303,7 @@ function visg_element_data(funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val) 
   lookup_bits(simm, choices)
 }
 $else
-function visg_element_data(funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val) = {
+function visg_element_data(num_elem, SEW, funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val) = {
   let imm_val : nat = unsigned(zero_extend(xlen, simm));
   match funct6 {
         VI_VSLIDEUP    => {
@@ -1359,7 +1359,7 @@ function clause execute VISG(funct6, vm, vs2, simm, vd) = {
   var result = initial_result;
 
   foreach (i from 0 to (num_elem - 1)) {
-    result[i] = masked_select(mask[i], visg_element_data(funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val), result[i])
+    result[i] = masked_select(mask[i], visg_element_data(num_elem, SEW, funct6, i, simm, LMUL_pow, SEW_pow, vs2_val, vd_val), result[i])
   };
 
   write_vreg(num_elem, SEW, LMUL_pow, vd, result);
