@@ -185,6 +185,28 @@ function phys_access_check forall 'n, 0 < 'n <= max_mem_access . (
   }
 }
 
+// 调用方已确认原始普通访问非对齐。按当前部分的起始地址取区域策略，
+// 不要求整个原始访问处于同一区域，以保留跨区域、跨页拆分行为。
+function misaligned_pma_check(
+  paddr : physaddr,
+  access : MemoryAccessType(mem_payload),
+  pbmt : bits(2),
+) -> option(ExceptionType) = {
+  let fault : misaligned_fault = match matching_pma(pma_regions, paddr, 1) {
+    None() => return Some(accessFaultFromAccessType(access)),
+    Some(region) => match pbmt {
+      0b01 => AlignmentFault,
+      0b10 => AccessFault,
+      _ => region.attributes.misaligned_fault,
+    },
+  };
+  match fault {
+    NoFault => None(),
+    AccessFault => Some(accessFaultFromAccessType(access)),
+    AlignmentFault => Some(alignmentFaultFromAccessType(access)),
+  }
+}
+
 // dispatches to MMIO regions or physical memory regions depending on physical memory map
 private function checked_mem_read forall 'n, 0 < 'n <= max_mem_access . (
   access : MemoryAccessType(mem_payload),

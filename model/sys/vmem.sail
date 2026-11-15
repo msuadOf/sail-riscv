@@ -223,6 +223,11 @@ private function translationMode(priv : Privilege) -> SATPMode = {
 
 type TR_Result('paddr : Type, 'failure : Type) = result(('paddr, ext_ptw), ('failure, ext_ptw))
 
+// 固定字段宽度，避免 Isla 后端对多态嵌套元组生成不支持的结构转换。
+struct TranslatedPPN = { ppn : bits(44), pbmt : bits(2) }
+struct TranslatedAddress = { paddr : physaddr, pbmt : bits(2) }
+
+
 // This function can be ignored on first reading since TLBs are not
 // part of RISC-V architecture spec (see TLB NOTE above).
 // Translate on TLB hit, and maintenance of PTE in TLB
@@ -237,7 +242,7 @@ private function translate_TLB_hit forall 'v, is_sv_mode('v) . (
   ext_ptw   : ext_ptw,
   tlb_index : tlb_index_range,
   ent       : TLB_Entry,
-) -> TR_Result(ppn_bits('v), PTW_Error) = {
+) -> TR_Result(TranslatedPPN, PTW_Error) = {
 
   let pte_size  = if sv_width == 32 then 4 else 8;
   let pte       = tlb_get_pte(pte_size, ent);  // Step 2 of VATP.
@@ -246,12 +251,15 @@ private function translate_TLB_hit forall 'v, is_sv_mode('v) . (
   let pte_check = check_PTE_permission(access, priv, mxr, do_sum, pte_flags,
                                        ext_pte, ext_ptw);
 
+  let translated : TranslatedPPN = struct {
+    ppn = zero_extend(tlb_get_ppn(sv_width, ent, vpn)), pbmt = ext_pte[PBMT]
+  };
   match pte_check {
     PTE_Check_Failure(ext_ptw, pte_failure) =>
       Err(ext_get_ptw_error(pte_failure), ext_ptw),
     PTE_Check_Success(ext_ptw) =>
       match update_PTE_Bits(pte, access) {
-        None()     => Ok(tlb_get_ppn(sv_width, ent, vpn), ext_ptw),
+        None()     => Ok(translated, ext_ptw),
         Some(pte') =>
           // Step 9 of VATP. See platform.sail.
           if not(plat_enable_dirty_update) then
@@ -265,7 +273,7 @@ private function translate_TLB_hit forall 'v, is_sv_mode('v) . (
               Err(_) => internal_error(__FILE__, __LINE__,
                                        "invalid physical address in TLB")
             };
-            Ok(tlb_get_ppn(sv_width, ent, vpn), ext_ptw)
+            Ok(translated, ext_ptw)
           }
       }
   }
@@ -282,7 +290,7 @@ private function translate_TLB_miss forall 'v, is_sv_mode('v) . (
   mxr      : bool,
   do_sum   : bool,
   ext_ptw  : ext_ptw,
-) -> TR_Result(ppn_bits('v), PTW_Error) = {
+) -> TR_Result(TranslatedPPN, PTW_Error) = {
   let initial_level = if 'v == 32 then 1 else (if 'v == 39 then 2 else (if 'v == 48 then 3 else 4));
 
   // Step 2 of VATP occurs in pt_walk().
@@ -293,12 +301,13 @@ private function translate_TLB_miss forall 'v, is_sv_mode('v) . (
     Err(f, ext_ptw) => Err(f, ext_ptw),
     Ok(struct {ppn, pte, pteAddr, level, global}, ext_ptw) => {
       let ext_pte = ext_bits_of_PTE(pte);
+      let translated : TranslatedPPN = struct { ppn = zero_extend(ppn), pbmt = ext_pte[PBMT] };
       // Without TLBs, this 'match' expression can be replaced simply
-      // by: 'Ok(ppn, ext_ptw)'    (see TLB NOTE above)
+      // by: 'Ok(translated, ext_ptw)'    (see TLB NOTE above)
       match update_PTE_Bits(pte, access) {
         None() => {
           add_to_TLB(sv_width, asid, vpn, ppn, pte, pteAddr, level, global);
-          Ok(ppn, ext_ptw)
+          Ok(translated, ext_ptw)
         },
         Some(pte) =>
           // Step 9 of VATP. See platform.sail.
@@ -310,7 +319,7 @@ private function translate_TLB_miss forall 'v, is_sv_mode('v) . (
             match write_pte(pteAddr, pte_size, pte) {
               Ok(_) => {
                 add_to_TLB(sv_width, asid, vpn, ppn, pte, pteAddr, level, global);
-                Ok(ppn, ext_ptw)
+                Ok(translated, ext_ptw)
               },
               Err(_) =>
                 Err(PTW_No_Access(), ext_ptw)
@@ -340,7 +349,7 @@ private function translate forall 'v, is_sv_mode('v) . (
   mxr      : bool,
   do_sum   : bool,
   ext_ptw  : ext_ptw,
-) -> TR_Result(ppn_bits('v), PTW_Error) = {
+) -> TR_Result(TranslatedPPN, PTW_Error) = {
   // On first reading, assume lookup_TLB returns None(), since TLBs
   // are not part of RISC-V archticture spec (see TLB NOTE above)
   match lookup_TLB(sv_width, asid, vpn) {
@@ -365,10 +374,10 @@ private function get_satp forall 'v, is_sv_mode('v). (
 // Top-level addr-translation function
 // PUBLIC: invoked from instr-fetch, atomics and CBOs
 // [postlude/fetch.sail, A/zaamo_insts.sail, Zicbo{zm}/zicbo{zm}_insts.sail].
-function translateAddr(
+function translateAddrWithPBMT(
   vAddr : virtaddr,
   access : MemoryAccessType(mem_payload),
-) -> TR_Result(physaddr, ExceptionType) = {
+) -> TR_Result(TranslatedAddress, ExceptionType) = {
 
   // Effective privilege takes into account mstatus.PRV, mstatus.MPP
   // See sys_control.sail for effectivePrivilege() and sys_regs.sail for cur_privilege.
@@ -376,10 +385,13 @@ function translateAddr(
 
   let mode = translationMode(effPriv);
 
-  if mode == Bare then return Ok(Physaddr(zero_extend(bits_of(vAddr))), init_ext_ptw);
+  if mode == Bare then {
+    let translated : TranslatedAddress = struct { paddr = Physaddr(zero_extend(bits_of(vAddr))), pbmt = 0b00 };
+    return Ok(translated, init_ext_ptw)
+  };
 
   // Sv39 -> 39, etc.
-  let sv_width = satp_mode_width(mode);
+  let 'sv_width = satp_mode_width(mode);
 
   // For Sv32 on RV64, satp is 32 bits (SXLEN), not XLEN.
   let satp_sxlen = get_satp(sv_width);
@@ -406,7 +418,8 @@ function translateAddr(
                         init_ext_ptw);
     // Fixup result PA or exception
     match res {
-      Ok(ppn, ext_ptw) => {
+      Ok(translated, ext_ptw) => {
+        let ppn : ppn_bits('sv_width) = trunc(translated.ppn);
         // Step 10 of VATP.
         // Append the page offset. This is now a 34 or 56 bit address.
         let paddr = ppn @ bits_of(vAddr)[pagesize_bits - 1 .. 0];
@@ -414,10 +427,20 @@ function translateAddr(
         // On RV64 paddr can be 34 or 56 bits, so we zero extend to 64.
         // On RV32 paddr can only be 34 bits. Sail knows this due to
         // the assertion above.
-        Ok(Physaddr(zero_extend(paddr)), ext_ptw)
+        let translated : TranslatedAddress = struct { paddr = Physaddr(zero_extend(paddr)), pbmt = translated.pbmt };
+        Ok(translated, ext_ptw)
       },
       Err(f, ext_ptw)  => Err(translationException(access, f), ext_ptw)
     }
+  }
+}
+
+// 保留取指、原子与 CBO 的既有接口；普通访存另取本次映射的 PBMT。
+function translateAddr(vaddr : virtaddr, access : MemoryAccessType(mem_payload))
+  -> TR_Result(physaddr, ExceptionType) = {
+  match translateAddrWithPBMT(vaddr, access) {
+    Ok(translated, ext_ptw) => Ok(translated.paddr, ext_ptw),
+    Err(e, ext_ptw) => Err(e, ext_ptw),
   }
 }
 
