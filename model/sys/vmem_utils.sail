@@ -160,14 +160,9 @@ function vmem_read_addr(vaddr, offset, width, access, aq, rl, res) = {
     then return Err(Memory_Exception(vaddr, E_Load_Addr_Align()));
   };
 
-  // 普通访问先按原始地址检查，再拆分；LR/SC 保留原有翻译与权限路径。
+  // 保留原始非对齐标志，在每部分真正访存前检查；不提前翻译低地址，
+  // 以免改变逆序拆分的异常与部分访存顺序。LR/SC 仍走原有翻译路径。
   let misaligned = not(res) & not(is_aligned_addr(vaddr, width));
-  let initial_translation = if res then translateAddr(vaddr, access)
-                            else translateDataAddr(vaddr, access, misaligned);
-  match initial_translation {
-    Err(e, _) => return Err(Memory_Exception(vaddr, e)),
-    Ok(_, _) => (),
-  };
 
   // If the load is misaligned or an allowed misaligned access, split into `n`
   // (single-copy-atomic) memory operations, each of `bytes` width. If the load is
@@ -183,8 +178,7 @@ function vmem_read_addr(vaddr, offset, width, access, aq, rl, res) = {
   repeat {
     let offset = i;
     let vaddr = vaddr + (offset * bytes);
-    match (if offset == 0 then initial_translation
-           else if res then translateAddr(Virtaddr(vaddr), access)
+    match (if res then translateAddr(Virtaddr(vaddr), access)
            else translateDataAddr(Virtaddr(vaddr), access, misaligned)) {
       Err(e, _) => return Err(Memory_Exception(Virtaddr(vaddr), e)),
 
@@ -222,14 +216,9 @@ function vmem_write_addr(vaddr, width, data, access, aq, rl, res) = {
   if   check_misaligned(vaddr, width)
   then return Err(Memory_Exception(vaddr, E_SAMO_Addr_Align()));
 
-  // 普通访问先按原始地址检查，再拆分；LR/SC 保留原有翻译与权限路径。
+  // 保留原始非对齐标志，在每部分真正访存前检查；不提前翻译低地址，
+  // 以免改变逆序拆分的异常与部分访存顺序。LR/SC 仍走原有翻译路径。
   let misaligned = not(res) & not(is_aligned_addr(vaddr, width));
-  let initial_translation = if res then translateAddr(vaddr, access)
-                            else translateDataAddr(vaddr, access, misaligned);
-  match initial_translation {
-    Err(e, _) => return Err(Memory_Exception(vaddr, e)),
-    Ok(_, _) => (),
-  };
 
   // If the store is misaligned or an allowed misaligned access, split into `n`
   // (single-copy-atomic) memory operations, each of `bytes` width. If the store is
@@ -245,8 +234,7 @@ function vmem_write_addr(vaddr, width, data, access, aq, rl, res) = {
   repeat {
     let offset = i;
     let vaddr = vaddr + (offset * bytes);
-    match (if offset == 0 then initial_translation
-           else if res then translateAddr(Virtaddr(vaddr), access)
+    match (if res then translateAddr(Virtaddr(vaddr), access)
            else translateDataAddr(Virtaddr(vaddr), access, misaligned)) {
       Err(e, _) => return Err(Memory_Exception(Virtaddr(vaddr), e)),
 
