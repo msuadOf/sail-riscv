@@ -564,10 +564,11 @@ postlude {
 
 unit_tests {
   after postlude
-  requires prelude, core, sys, exceptions, postlude
+  requires prelude, core, sys, exceptions, postlude, A_types, Zaamo
 
   files
     unit_tests/test_mstatus.sail,
+    unit_tests/test_atomic.sail,
 }
 
 main {

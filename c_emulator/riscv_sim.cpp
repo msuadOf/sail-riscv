@@ -647,6 +647,17 @@ int inner_main(int argc, char **argv) {
     deep_merge_json(config_json, override_item);
   }
 
+  // 旧平台未声明 AMO 等级时，保留原来对已启用 AMO 的接纳范围。
+  // 编译时配置仍须使用同步后的 config.json.in。
+  if (config_json.contains("memory") && config_json["memory"].contains("regions")) {
+    for (auto &region : config_json["memory"]["regions"].array_range()) {
+      if (region.contains("attributes") && region["attributes"].is_object() &&
+          !region["attributes"].contains("atomic_support")) {
+        region["attributes"]["atomic_support"] = "AMOCASQ";
+      }
+    }
+  }
+
   std::ostringstream os;
   os << config_json;
   config_json_string = os.str();

@@ -101,9 +101,9 @@ private function pmaCheck forall 'n, 0 < 'n <= max_mem_access .
             // or absence (RsrvNonEventual) of an eventual success guarantee.
             LoadReserved(_)     => {assert(res_or_con); attributes.readable & attributes.reservability != RsrvNone},
             StoreConditional(_) => {assert(res_or_con); attributes.writable & attributes.reservability != RsrvNone},
-            // TODO: Extend MemoryAccessType with the specific type of AMO operation. For now we assume all memory
-            // supports all AMO operations.
-            Atomic(_, _, _)     => {assert(res_or_con); attributes.readable & attributes.writable},
+            // 读侧先检查整个 AMO，CAS 比较失败也必须经过这里。
+            Atomic(op, _, _)    => {assert(res_or_con); attributes.readable & attributes.writable
+                                    & pma_supports_atomic(attributes.atomic_support, op, width)},
 
             // TODO for the CMO extensions: "The PMAs shall be the
             // same for all physical addresses in the cache block, and

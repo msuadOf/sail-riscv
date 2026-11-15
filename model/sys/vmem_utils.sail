@@ -180,7 +180,10 @@ val vmem_write_addr : forall 'width, is_mem_width('width).
   -> result(bool, ExecutionResult)
 
 function vmem_write_addr(vaddr, width, data, access, aq, rl, res) = {
-  if   check_misaligned(vaddr, width)
+  // SC 不受普通访存非对齐开关放宽；必须在拆分前检查原始宽度。
+  assert(res == is_store_conditional(access));
+  if   (is_store_conditional(access) & not(is_aligned_addr(vaddr, width)))
+       | check_misaligned(vaddr, width)
   then return Err(Memory_Exception(vaddr, E_SAMO_Addr_Align()));
 
   // If the store is misaligned or an allowed misaligned access, split into `n`
@@ -222,7 +225,9 @@ function vmem_write_addr(vaddr, width, data, access, aq, rl, res) = {
 
           Ok(()) => {
             let write_value = data[(8 * (offset + 1) * bytes) - 1 .. 8 * offset * bytes];
-            match mem_write_value(paddr, bytes, write_value, aq, rl, res) {
+            // 保留原始 access，避免成功的 SC 被重构成普通 Store 后漏查 reservability。
+            let effPriv = effectivePrivilege(access, mstatus, cur_privilege);
+            match mem_write_value_priv_meta(paddr, bytes, write_value, access, effPriv, default_meta, aq, rl, res) {
               Err(e) => return Err(Memory_Exception(Virtaddr(vaddr), e)),
               Ok(s)  => write_success = write_success & s,
             }

@@ -19,7 +19,7 @@
 // most implementations.
 
 // Set of atomic instructions supported by memory.
-// Each value is a superset of the previous ones.
+// 每一级包含前一级；CAS 等级同时限制 CAS 的最大访问宽度。
 enum AtomicSupport = {
   AMONone,
   AMOSwap,
@@ -80,9 +80,8 @@ struct PMA = {
   write_idempotent : bool,
   // Optionally cause an access/alignment fault on misaligned access.
   misaligned_fault : misaligned_fault,
-  // TODO: Atomicity PMA. This is not supported yet because
-  // the MemoryAccessType needs to be extended to indicate the AMO type.
-  // atomic_support   : AtomicSupport,
+  // AMO 支持级别与 LR/SC 的 reservability 独立。
+  atomic_support   : AtomicSupport,
   reservability    : Reservability,
   // Flags whether this memory supports CBO.zero. Note that main memory regions must
   // have this set.
@@ -131,8 +130,7 @@ function pma_attributes_to_str(attr : PMA) -> string =
   (if attr.read_idempotent then " read-idempotent" else "") ^
   (if attr.write_idempotent then " write-idempotent" else "") ^
   " misaligned_fault:" ^ to_str(attr.misaligned_fault) ^
-  // TODO: Atomicity PMA.
-  // " " ^ to_str(attr.atomic_support) ^
+  " " ^ to_str(attr.atomic_support) ^
   " " ^ to_str(attr.reservability) ^
   (if attr.supports_cbo_zero then " supports_cbo_zero" else "")
 
@@ -144,3 +142,21 @@ overload to_str = {pma_attributes_to_str, pma_region_to_str}
 
 // The list of PMAs. These must be sorted and cannot overlap.
 register pma_regions : list(PMA_Region) = config memory.regions
+
+// 指令译码负责扩展启用和指令宽度；PMA 再限制该区域接纳的操作／宽度。
+function pma_supports_atomic(support : AtomicSupport, op : amoop, width : mem_access_width) -> bool = {
+  match op {
+    AMOCAS => match support {
+      AMOCASW => width <= 4,
+      AMOCASD => width <= 8,
+      AMOCASQ => width <= 16,
+      _ => false,
+    },
+    _ => width <= 8 & (match support {
+      AMONone => false,
+      AMOSwap => op == AMOSWAP,
+      AMOLogical => op == AMOSWAP | op == AMOXOR | op == AMOAND | op == AMOOR,
+      _ => true,
+    }),
+  }
+}
