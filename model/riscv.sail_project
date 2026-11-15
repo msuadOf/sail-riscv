@@ -1,4 +1,6 @@
 variable RMEM = false
+// 仅 Isla 顺序执行选择模型内的 reservation 状态；其他后端保留 extern。
+variable ISLA_RESERVATION = false
 
 prelude {
   files
@@ -65,7 +67,7 @@ sys {
   requires prelude, core, exceptions, pmp, V_core, Smcntrpmf, Zicfilp_regs, A_types, Stateen, Zicbop_types
 
   files
-    sys/sys_reservation.sail,
+    if $ISLA_RESERVATION then sys/isla_reservation.sail else sys/sys_reservation.sail,
     sys/sys_control.sail,
     sys/platform.sail,
     sys/pma.sail,
@@ -569,6 +571,7 @@ unit_tests {
   files
     unit_tests/test_mstatus.sail,
     unit_tests/test_atomic.sail,
+    if $ISLA_RESERVATION then unit_tests/test_isla_reservation.sail else [],
 }
 
 main {
