@@ -116,6 +116,34 @@ function check_misaligned(vaddr : virtaddr, width : word_width) -> bool = {
   }
 }
 
+// 传入整条访问的非对齐标志，避免拆小后丢失；每个后续页面也使用自己的 PBMT。
+private function translateDataAddr(
+  vaddr : virtaddr,
+  access : MemoryAccessType(mem_payload),
+  misaligned : bool,
+) -> TR_Result(physaddr, ExceptionType) = {
+  match translateAddrWithPBMT(vaddr, access) {
+    Err(e, ext_ptw) => Err(e, ext_ptw),
+    Ok(translated, ext_ptw) => {
+      let paddr = translated.paddr;
+      let pbmt = translated.pbmt;
+      if misaligned then {
+        // 先保留权限错误，避免 NC 将禁止访问的区域变成对齐错误。
+        let priv = effectivePrivilege(access, mstatus, cur_privilege);
+        match phys_access_check(access, priv, paddr, 1, false) {
+          Some(e) => return Err(e, ext_ptw),
+          None() => (),
+        };
+        match misaligned_pma_check(paddr, access, pbmt) {
+          Some(e) => return Err(e, ext_ptw),
+          None() => (),
+        }
+      };
+      Ok(paddr, ext_ptw)
+    },
+  }
+}
+
 val vmem_read_addr : forall 'width, is_mem_width('width).
   (virtaddr, xlenbits, int('width), MemoryAccessType(mem_payload), bool, bool, bool)
   -> result(bits(8 * 'width), ExecutionResult)
@@ -132,6 +160,15 @@ function vmem_read_addr(vaddr, offset, width, access, aq, rl, res) = {
     then return Err(Memory_Exception(vaddr, E_Load_Addr_Align()));
   };
 
+  // 普通访问先按原始地址检查，再拆分；LR/SC 保留原有翻译与权限路径。
+  let misaligned = not(res) & not(is_aligned_addr(vaddr, width));
+  let initial_translation = if res then translateAddr(vaddr, access)
+                            else translateDataAddr(vaddr, access, misaligned);
+  match initial_translation {
+    Err(e, _) => return Err(Memory_Exception(vaddr, e)),
+    Ok(_, _) => (),
+  };
+
   // If the load is misaligned or an allowed misaligned access, split into `n`
   // (single-copy-atomic) memory operations, each of `bytes` width. If the load is
   // aligned, then `n` = 1 and bytes will remain unchanged.
@@ -146,7 +183,9 @@ function vmem_read_addr(vaddr, offset, width, access, aq, rl, res) = {
   repeat {
     let offset = i;
     let vaddr = vaddr + (offset * bytes);
-    match translateAddr(Virtaddr(vaddr), access) {
+    match (if offset == 0 then initial_translation
+           else if res then translateAddr(Virtaddr(vaddr), access)
+           else translateDataAddr(Virtaddr(vaddr), access, misaligned)) {
       Err(e, _) => return Err(Memory_Exception(Virtaddr(vaddr), e)),
 
       Ok(paddr, _) => match mem_read(access, paddr, bytes, aq, rl, res) {
@@ -183,6 +222,15 @@ function vmem_write_addr(vaddr, width, data, access, aq, rl, res) = {
   if   check_misaligned(vaddr, width)
   then return Err(Memory_Exception(vaddr, E_SAMO_Addr_Align()));
 
+  // 普通访问先按原始地址检查，再拆分；LR/SC 保留原有翻译与权限路径。
+  let misaligned = not(res) & not(is_aligned_addr(vaddr, width));
+  let initial_translation = if res then translateAddr(vaddr, access)
+                            else translateDataAddr(vaddr, access, misaligned);
+  match initial_translation {
+    Err(e, _) => return Err(Memory_Exception(vaddr, e)),
+    Ok(_, _) => (),
+  };
+
   // If the store is misaligned or an allowed misaligned access, split into `n`
   // (single-copy-atomic) memory operations, each of `bytes` width. If the store is
   // aligned, then `n` = 1 and bytes will remain unchanged.
@@ -197,7 +245,9 @@ function vmem_write_addr(vaddr, width, data, access, aq, rl, res) = {
   repeat {
     let offset = i;
     let vaddr = vaddr + (offset * bytes);
-    match translateAddr(Virtaddr(vaddr), access) {
+    match (if offset == 0 then initial_translation
+           else if res then translateAddr(Virtaddr(vaddr), access)
+           else translateDataAddr(Virtaddr(vaddr), access, misaligned)) {
       Err(e, _) => return Err(Memory_Exception(Virtaddr(vaddr), e)),
 
       // NOTE: Currently, we only announce the effective address if address translation is successful.
