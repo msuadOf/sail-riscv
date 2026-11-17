@@ -19,3 +19,28 @@ function test_mstatus_sxl_uxl_reset_values() -> unit = {
   // UXL
   assert(mstatush_val[1 .. 0] == expected_xl);
 }
+
+// 无 S 时 SPELP 必须只读零；MPELP 仍仅取决于 Zicfilp。
+$[test]
+function test_mstatus_pelp_warl() -> unit = {
+  let saved = mstatus;
+  let requested = [saved with SPELP = 0b1, MPELP = 0b1];
+  let _ = write_CSR(0x300, requested.bits[xlen - 1 .. 0]);
+  assert(mstatus[SPELP] == bool_to_bit(hartSupports(Ext_Zicfilp) & hartSupports(Ext_S)));
+  if xlen == 64 then assert(mstatus[MPELP] == bool_to_bit(hartSupports(Ext_Zicfilp)));
+  mstatus = saved;
+}
+
+// 保留有 S 无 F 的浮点模拟选择，并检查 Zfinx 与无 F/无 S 的只读零。
+$[test]
+function test_mstatus_fs_warl() -> unit = {
+  let saved = mstatus;
+  let writable = not(hartSupports(Ext_Zfinx)) & (hartSupports(Ext_F) | hartSupports(Ext_S));
+  foreach (i from 0 to 3) {
+    let fs : bits(2) = to_bits(2, i);
+    let requested = [saved with FS = fs];
+    let _ = write_CSR(0x300, requested.bits[xlen - 1 .. 0]);
+    assert(mstatus[FS] == (if writable then fs else 0b00));
+  };
+  mstatus = saved;
+}

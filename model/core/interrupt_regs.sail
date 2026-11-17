@@ -87,8 +87,8 @@ bitfield Medeleg : bits(64) = {
 }
 
 private function legalize_medeleg(_o : Medeleg, v : bits(64)) -> Medeleg = {
-  // M-EnvCalls delegation is not supported
-  [Mk_Medeleg(v) with MEnvCall = 0b0]
+  // 特权手册 machine.adoc:1316–1320 要求位 11（M-EnvCall）和 16 只读零。
+  [Mk_Medeleg(v & 0xFFFF_FFFF_FFFE_FFFF) with MEnvCall = 0b0]
 }
 
 register mie     : Minterrupts // Enabled

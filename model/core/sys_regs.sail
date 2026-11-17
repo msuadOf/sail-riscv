@@ -220,7 +220,8 @@ private function legalize_mstatus(o : Mstatus, v : bits(64)) -> Mstatus = {
     // SXL = if xlen == 64 then v[SXL] else o[SXL],
     // UXL = if xlen == 64 then v[UXL] else o[UXL],
     // SDT = v[SDT],
-    SPELP = if hartSupports(Ext_Zicfilp) then v[SPELP] else 0b0,
+    // 未实现 S 时 SPELP 只读零（特权手册 machine.adoc:1158）。
+    SPELP = if hartSupports(Ext_Zicfilp) & hartSupports(Ext_S) then v[SPELP] else 0b0,
     TSR = if currentlyEnabled(Ext_S) then v[TSR] else 0b0,
     TW = if currentlyEnabled(Ext_U) then v[TW] else 0b0,
     TVM = if currentlyEnabled(Ext_S) then v[TVM] else 0b0,
@@ -229,11 +230,10 @@ private function legalize_mstatus(o : Mstatus, v : bits(64)) -> Mstatus = {
     MPRV = if currentlyEnabled(Ext_U) then v[MPRV] else 0b0,
     // We don't have any extension context yet.
     XS = extStatus_to_bits(Off),
-    // FS is WARL, and making FS writable can support the M-mode emulation of an FPU
-    // to support code running in S/U-modes.  Spike does this, and for now, we match it,
-    // but only if Zfinx isn't enabled.
-    // FIXME: This should be made a platform parameter.
-    FS = if hartSupports(Ext_Zfinx) then extStatus_to_bits(Off) else v[FS],
+    // 保留有 S 无 F 时供 M 态浮点模拟使用的可写选择；后续可设为平台参数。
+    // 无 F 且无 S 时 FS 只读零（machine.adoc:843）；Zfinx 同样要求只读零。
+    FS = if not(hartSupports(Ext_Zfinx)) & (hartSupports(Ext_F) | hartSupports(Ext_S))
+         then v[FS] else extStatus_to_bits(Off),
     MPP = if have_nominal_privLevel(v[MPP]) then v[MPP] else privLevel_to_bits(lowest_supported_privLevel()),
     SPP = if currentlyEnabled(Ext_S) then v[SPP] else 0b0,
     // TODO: make this configurable

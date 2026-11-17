@@ -568,6 +568,7 @@ unit_tests {
 
   files
     unit_tests/test_mstatus.sail,
+    unit_tests/test_csr_warl.sail,
     unit_tests/test_misaligned_access.sail,
 }
 

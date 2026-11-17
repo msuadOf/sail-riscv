@@ -210,8 +210,13 @@ private function translationMode(priv : Privilege) -> SATPMode = {
     };
     match satpMode_of_bits(arch, mbits) {
       Some(m) => m,
-      // The model does not support modifying SXL currently so this cannot happen.
-      None()  => internal_error(__FILE__, __LINE__, "invalid translation mode in satp")
+      None() => {
+        // 特权手册 supervisor.adoc:1049–1052（5f1104a0613a）：
+        // 写入不支持的 MODE 时整次写入无效，所有字段保持旧值。
+        // 合法写入不能建立此保留 MODE 前态；Bare 仅作断言后的类型占位。
+        assert(false);
+        Bare
+      }
     }
   }
 }
