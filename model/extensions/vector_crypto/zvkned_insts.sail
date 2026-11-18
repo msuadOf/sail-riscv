@@ -31,7 +31,6 @@ function clause execute VAESDF(funct6, vs2, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
-  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
@@ -89,7 +88,6 @@ function clause execute VAESDM(funct6, vs2, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
-  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
@@ -148,7 +146,6 @@ function clause execute VAESEF(funct6, vs2, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
-  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
@@ -206,7 +203,6 @@ function clause execute VAESEM(funct6, vs2, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
-  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
@@ -259,7 +255,6 @@ function clause execute VAESKF1_VI(vs2, rnd, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
-  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
@@ -314,7 +309,6 @@ function clause execute VAESKF2_VI(vs2, rnd, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
-  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
@@ -370,7 +364,6 @@ function clause execute VAESZ_VS(vs2, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
-  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);

@@ -13,9 +13,9 @@ on_limit_reached = "concretize"
 kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_control.sail"
-start_line = 498
+start_line = 483
 start_column = 2
-end_line = 501
+end_line = 486
 end_column = 1
 
 # init_masked_source 的逐 lane foreach。基线 162 条完成路径时，

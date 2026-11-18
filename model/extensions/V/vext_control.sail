@@ -57,21 +57,6 @@ function assert_widened_sew(SEW : int) -> unit = {
   }
 }
 
-function assert_sew_32(SEW : int) -> unit = {
-  match SEW {
-    32 => (),
-    _  => assert(false)
-  }
-}
-
-function assert_sew_32_or_64(SEW : int) -> unit = {
-  match SEW {
-    32 => (),
-    64 => (),
-    _  => assert(false)
-  }
-}
-
 function assert_widened_lmul_pow(LMUL_pow : int) -> unit = {
   match LMUL_pow {
     -2 => (),
