@@ -11,7 +11,8 @@ on_limit_reached = "concretize"
 # 不额外限制，以保留 SEW=32/64 覆盖。
 # 第 17 行是循环外扩展选择、SEW 与寄存器重叠合法性条件，不限制，也不固定
 # vl/vstart/vtype/vm/寄存器。Region 使用半开区间 [44:2,70:3)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/vector_crypto/zvknhab_insts.sail"
 start_line = 44

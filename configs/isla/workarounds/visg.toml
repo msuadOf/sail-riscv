@@ -8,7 +8,8 @@ on_limit_reached = "concretize"
 
 # 基线到 488 paths 时，循环内 vslidedown 边界已 fork 104 次，vslideup 28 次、
 # vrgather 19 次；循环外 overlap/funct6 分派不在本区域内。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
 start_line = 1312

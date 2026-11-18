@@ -8,7 +8,8 @@ on_limit_reached = "concretize"
 
 # 基线在完成路径从 211 增至 219 时，该区域的分支已从约 500 增至 636。
 # 区域为 foreach 内的 if、进位加法与 result 写入，半开区间 [581:4, 586:5)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_vm_insts.sail"
 start_line = 581

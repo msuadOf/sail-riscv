@@ -11,7 +11,8 @@ on_limit_reached = "concretize"
 # region 或方向偏置，以保留 VV/VS 的活跃执行覆盖。
 # 73:38-75:80 与 78:38-80:129 是两种形式的循环外 encdec 合法性条件，
 # 不限制，也不固定 vl/vstart/vtype/vm/寄存器。Region 为 [100:2,128:3)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/vector_crypto/zvksed_insts.sail"
 start_line = 100

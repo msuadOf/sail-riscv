@@ -12,7 +12,8 @@ on_limit_reached = "concretize"
 # 是本 clause 的明确热点。funct6 已由循环外编码分派确定；region 只压重复到达的
 # element 计算，不固定 funct6、vm、vl、vstart、vtype 或寄存器。
 # 121:1-123:70 的循环外 encdec 不限制。Region 使用半开区间 [155:2,170:3)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/Zvabd/zvabd_insts.sail"
 start_line = 155

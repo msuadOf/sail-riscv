@@ -14,7 +14,8 @@ on_limit_reached = "concretize"
 # Sail start 418:    foreach (i from 0 to (num_elem - 1)) {
 # ...
 # Sail end   430:    };
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
 start_line = 419

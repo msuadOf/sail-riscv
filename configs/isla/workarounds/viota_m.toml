@@ -9,7 +9,8 @@ on_limit_reached = "concretize"
 # 独立 60 秒基线完成 174 条路径后超时；内层源 bit 判断在日志中 fork 214 次。
 # fallthrough 对应源 bit 为 1、递增 sum，使用 256:1 抑制该方向以避免稠密约束。
 # 原语方案：该判断已移入纯前缀运算，区域锚定替代调用；调用不分叉，旧偏置不作用于外层mask。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 256
 sample_bias_direction = "fallthrough"
@@ -21,7 +22,8 @@ end_column = 49
 
 # 超时路径的主要 SMT 调用点是完整循环与外层 mask 判断；半开区间
 # 原始[337:2,342:3)随步骤0–2移动；本次为[334:2,336:3)，仍只覆盖foreach，外层mask保持无偏采样。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_mask_insts.sail"
 start_line = 334

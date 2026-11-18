@@ -11,7 +11,8 @@ on_limit_reached = "concretize"
 # 559:2-559:80 fork；同类 RMVVTYPE 的短诊断也确认这是 reduction 的最后 helper 热点。
 # IR 为 `jump (vm == 1)`：16:1 偏置 fallthrough 方向，仅少量路径采样
 # fallthrough 的 masked reduction，其余路径走无需读取 v0 的快速 jump 侧。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 16
 sample_bias_direction = "fallthrough"
@@ -22,7 +23,8 @@ end_line = 515
 end_column = 1
 
 # init_masked_source 的逐 lane foreach。基线日志在 452:11-464:5 持续因 vl/vr0 fork。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
 start_line = 434
@@ -31,7 +33,8 @@ end_line = 451
 end_column = 4
 
 # execute RIVVTYPE 的 widening reduction foreach。基线日志持续命中 59:8-59:21。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_red_insts.sail"
 start_line = 57

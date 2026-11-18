@@ -8,7 +8,8 @@ on_limit_reached = "concretize"
 
 # 基线从 29 增至 147 条完成路径时，该循环内分支从 174 增至 532 次 fork；
 # 同期其余 execute/helper 热点最高仅 42 次。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/Zvabd/zvabd_insts.sail"
 start_line = 45

@@ -7,7 +7,8 @@ max_forks_per_branch = 1
 on_limit_reached = "concretize"
 
 # VIMS_VADC 的逐 lane foreach，半开区间为 [704:2, 711:1)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_vm_insts.sail"
 start_line = 704

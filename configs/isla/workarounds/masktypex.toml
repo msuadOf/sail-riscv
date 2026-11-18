@@ -11,7 +11,8 @@ on_limit_reached = "concretize"
 # Region 是半开区间 [start, end)：
 # Sail start 922:    foreach (i from 0 to (num_elem - 1)) {
 # Sail end   934:    };
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
 start_line = 923

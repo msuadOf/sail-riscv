@@ -14,7 +14,8 @@ on_limit_reached = "concretize"
 # if 的 jump 同样跳过异或更新。使用 256:1 fallthrough 偏置降低进入循环及累积
 # 符号异或的比例。16:36-16:78 是循环外 encdec，不限制，也不固定
 # vl/vstart/vtype/vm/寄存器。Region 使用半开区间 [38:2,57:3)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 256
 sample_bias_direction = "fallthrough"

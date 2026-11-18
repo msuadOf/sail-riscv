@@ -16,7 +16,8 @@ on_limit_reached = "concretize"
 # Region 为半开区间 [start, end)：
 # Sail start 1563:    foreach (i from 0 to (num_elem - 1)) {
 # Sail end   1620:    };
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_arith_insts.sail"
 start_line = 1563
@@ -28,7 +29,8 @@ end_column = 4
 # 返回 ISA 规定的除零结果，fallthrough 侧进入昂贵的符号 quot/rem。偏置压制
 # fallthrough，使大部分路径优先走合法的除零边界，同时按路径签名保留少量非零除数
 # 样本；没有把寄存器值或运行态固定成单值。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 16
 sample_bias_direction = "fallthrough"
@@ -38,7 +40,8 @@ start_column = 40
 end_line = 1592
 end_column = 103
 
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 16
 sample_bias_direction = "fallthrough"
@@ -48,7 +51,8 @@ start_column = 40
 end_line = 1600
 end_column = 103
 
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 16
 sample_bias_direction = "fallthrough"
@@ -58,7 +62,8 @@ start_column = 40
 end_line = 1608
 end_column = 108
 
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 16
 sample_bias_direction = "fallthrough"
@@ -70,7 +75,8 @@ end_column = 108
 
 # 有符号除法的 q > elem_max 在 IR 中 jump 侧为溢出结果 elem_min。该边界仍保留，
 # 但只让少量路径采到 jump 侧，避免在同一条昂贵除法结果上继续放大分支。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 16
 sample_bias_direction = "jump"
@@ -85,7 +91,8 @@ end_column = 77
 # 其中 746:26-746:63 被调用 48 次。match 的第一条 IR 分支是
 # `jump @not(rounding_mode == 0b00)`：jump 方向只采样 1/65536 后，当前规模的大部分路径选择直接返回
 # rounding_bit 的 0b00 arm，少量路径继续覆盖其余 vxrm arm。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 65536
 sample_bias_direction = "jump"

@@ -9,7 +9,8 @@ on_limit_reached = "concretize"
 # 独立 60 秒基线仅完成 2 条路径；线程在 113:4-113:56 的符号 bit 判定上
 # 反复 fork，并因 count 累加形成昂贵 SMT。半开区间精确覆盖逐 bit foreach。
 # 该 if 的 fallthrough 是条件为真、执行 count + 1，使用 256:1 抑制该方向。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 256
 sample_bias_direction = "fallthrough"

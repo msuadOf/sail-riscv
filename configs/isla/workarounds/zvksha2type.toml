@@ -11,7 +11,8 @@ on_limit_reached = "concretize"
 # 只做定宽位运算，不额外限制。
 # 第 86 行是循环外扩展选择、SEW、funct6 编码与寄存器合法性条件，不限制，
 # 也不固定 vl/vstart/vtype/vm/寄存器。Region 使用半开区间 [188:2,233:3)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/vector_crypto/zvknhab_insts.sail"
 start_line = 188

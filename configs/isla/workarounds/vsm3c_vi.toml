@@ -10,7 +10,8 @@ on_limit_reached = "concretize"
 # 本 clause 热点为 88:2-102:3 的 element-group foreach；SM3 helper 仅少量分派。
 # 64:36-66:128 是循环外 encdec，不限制，也不固定运行态、立即数或寄存器。
 # Region 使用半开区间 [88:2,102:3)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/vector_crypto/zvksh_insts.sail"
 start_line = 88

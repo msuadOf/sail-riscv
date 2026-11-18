@@ -12,7 +12,8 @@ on_limit_reached = "concretize"
 # 71:36-71:78 是循环外 encdec，不限制，也不固定 vl/vstart/vtype/vm/寄存器。
 # 与同文件 VGHSH_VV 沿用一致的 256:1 fallthrough 偏置；Region 使用半开区间
 # [91:2,107:3)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 256
 sample_bias_direction = "fallthrough"

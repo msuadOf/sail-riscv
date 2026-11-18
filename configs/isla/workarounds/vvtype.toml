@@ -6,14 +6,14 @@
 # 目标：**每条具体汇编指令**（vadd.vv、vrgather.vv……）最终生成的 path 不超过 100 条，
 # 超出的部分靠局部限制做抽样采样，而不是把某个字段钉死成单一取值。两种预算配合使用：
 #
-# - `max_forks_per_branch = 1`（不配 `regions`，因此**全局生效**）：per-scope 预算，
+# - `max_forks_per_branch = 1`（不配 `path_merge.regions` 中 kind="limit_filter"，因此**全局生效**）：per-scope 预算，
 #   一条路径在同一个分支点只允许 fork 一次。一次性到达的分支点（合法性前导、funct6
 #   dispatch）每条路径只经过一次，不受影响；同一条路径**重复到达**的分支点（逐 lane
 #   循环体）由此从 2^n 压回 2。
-#   这里刻意不配 `regions`：路径规模最大的分支点是 `bool_bit_forwards`（prelude.sail 的
+#   这里刻意不配 `path_merge.regions` 中 kind="limit_filter"：路径规模最大的分支点是 `bool_bit_forwards`（prelude.sail 的
 #   `bool_bit` mapping，被 `bool_to_bit` 逐 lane 调用），它在 IR 里的 jump **没有 Sail 源码
 #   位置**（标注是 `1042 这类 IR 内部编号），任何源码 region 都选不中它。
-# - `region_fork_limits`：region 级预算，整段区间内所有分支点共享一条路径的 fork 次数。
+# - `path_merge.regions` 中 kind="fork_limit"：region 级预算，整段区间内所有分支点共享一条路径的 fork 次数。
 #   Sail 的 `match` 在 IR 里是一串位于不同 pc 的 jump，每个 arm 判定都是独立分支点，
 #   per-scope 预算对它无效，只有 region 预算能把 SEW/LMUL 的多路展开抽样成 N+1 个取值。
 #
@@ -42,7 +42,8 @@ Illegal_Instruction = 2
 # Sail start 181:            if mask[i] == 0b1 then {
 # ...
 # Sail end   187:            }
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 0
 file = "extensions/V/vext_arith_insts.sail"
 start_line = 181
@@ -54,7 +55,8 @@ end_column = 7
 # Sail start 190:            if mask[i] == 0b1 then {
 # ...
 # Sail end   196:            }
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 0
 file = "extensions/V/vext_arith_insts.sail"
 start_line = 190
@@ -69,7 +71,8 @@ end_column = 7
 # ...
 # Sail end   640:    }
 # 配置终点使用紧随函数后的空行 634:1。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 0
 file = "extensions/V/vext_utils_insts.sail"
 start_line = 620
@@ -83,7 +86,8 @@ end_column = 1
 # Sail start 71:function valid_reg_overlap(rs : vregidx, rd : vregidx, EMUL_pow_rs : int, EMUL_pow_rd : int) -> bool = {
 # ...
 # Sail end   85:    } else true;
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 0
 file = "extensions/V/vext_utils_insts.sail"
 start_line = 71
@@ -101,7 +105,8 @@ end_column = 3
 # 由下面 gather 逐 lane 循环体上的局部 limit 控制不爆炸（>1000），最终条数由档 A 兜底。
 # Sail start 65:                                                              then vs1 == vd | vs2 == vd
 # Sail end   65:                                                              then vs1 == vd | vs2 == vd
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 0
 sample_bias = 16
 sample_bias_direction = "jump"
@@ -120,7 +125,8 @@ end_column = 57
 # Sail start 121:            if mask[i] == 0b1 then {
 # ...
 # Sail end   124:            }
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 0
 file = "extensions/V/vext_arith_insts.sail"
 start_line = 121
@@ -133,7 +139,8 @@ end_column = 7
 # Sail start 131:            if mask[i] == 0b1 then {
 # ...
 # Sail end   136:            }
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 0
 file = "extensions/V/vext_arith_insts.sail"
 start_line = 131

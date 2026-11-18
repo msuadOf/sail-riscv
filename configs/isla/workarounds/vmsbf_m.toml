@@ -9,7 +9,8 @@ on_limit_reached = "concretize"
 # 独立 60 秒基线仅完成 9 条路径；超时路径的 392 次 SMT 中，最热点是
 # 196 行 mask 判断与 197 行符号源 bit 判断。内层 if 的 fallthrough 是
 # vs2 bit 为 1、设置 found_elem，使用 256:1 抑制该方向以避免稠密约束。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 sample_bias = 256
 sample_bias_direction = "fallthrough"
@@ -20,7 +21,8 @@ end_line = 194
 end_column = 49
 
 # 半开区间 [195:2,200:4) 精确覆盖逐 bit foreach；外层 mask 保持无偏采样。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_mask_insts.sail"
 start_line = 192

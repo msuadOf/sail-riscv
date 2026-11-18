@@ -11,7 +11,8 @@ on_limit_reached = "concretize"
 # 132:4-135:5 由 vl/vstart/vtype/vr0 驱动逐 lane fork，活跃 lane 随后调用
 # 昂贵的 carryless_mul。Region 为 execute VCLMULH_VV 的 foreach 半开区间
 # [131:2,136:4)，循环外合法性检查及 encdec 保持完整符号执行。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/vector_crypto/zvbc_insts.sail"
 start_line = 131

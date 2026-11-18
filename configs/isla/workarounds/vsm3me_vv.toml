@@ -12,7 +12,8 @@ on_limit_reached = "concretize"
 # 16:38-16:129 是循环外 SEW、element-group 对齐与寄存器重叠合法性条件，
 # 不限制，也不固定 vl/vstart/vtype/vm/寄存器。
 # Region 使用半开区间 [39:2,52:3)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/vector_crypto/zvksh_insts.sail"
 start_line = 39

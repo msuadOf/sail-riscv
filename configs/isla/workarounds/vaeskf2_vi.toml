@@ -11,7 +11,8 @@ on_limit_reached = "concretize"
 # 324:2-325:39 表达立即数归一化，均不单独限制。
 # 305:38-305:80 是循环外 encdec 合法性条件，不限制，也不固定
 # vl/vstart/vtype/rnd/寄存器。Region 使用半开区间 [332:2,347:3)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/vector_crypto/zvkned_insts.sail"
 start_line = 332

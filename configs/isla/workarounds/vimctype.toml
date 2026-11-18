@@ -8,7 +8,8 @@ on_limit_reached = "concretize"
 
 # 基线相邻观察点的完成路径从 110 增至 165，该循环体分支却从 293 增至 620。
 # 区域为 foreach 内的 if、无 carry-in 加法与 result 写入，半开区间 [640:4, 645:5)。
-[[execution_limits.region_fork_limits]]
+[[execution_limits.path_merge.regions]]
+kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_vm_insts.sail"
 start_line = 640
