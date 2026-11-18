@@ -66,9 +66,9 @@ end_column = 5
 kind = "fork_limit"
 max_forks_per_region = 1
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 620
+start_line = 619
 start_column = 2
-end_line = 642
+end_line = 641
 end_column = 1
 
 # get_fixed_rounding_incr 的 0b11 arm 会判断被丢弃位是否非零。正式运行在
@@ -82,9 +82,9 @@ max_forks_per_region = 1
 sample_bias = 4294967295
 sample_bias_direction = "fallthrough"
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 633
+start_line = 632
 start_column = 28
-end_line = 633
+end_line = 632
 end_column = 72
 
 # sticky_below_rounding 的 IR 在 vxrm=01 arm 中以 `jump sticky_below_rounding`
@@ -96,9 +96,9 @@ max_forks_per_region = 1
 sample_bias = 4294967295
 sample_bias_direction = "jump"
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 632
+start_line = 631
 start_column = 11
-end_line = 632
+end_line = 631
 end_column = 59
 
 # vxrm=01 arm 的短路 AND 在 IR 中是 `jump (rounding_bit == 1)` 后才计算
@@ -111,7 +111,7 @@ max_forks_per_region = 1
 sample_bias = 4294967295
 sample_bias_direction = "jump"
 file = "extensions/V/vext_utils_insts.sail"
-start_line = 636
+start_line = 635
 start_column = 26
-end_line = 636
+end_line = 635
 end_column = 91

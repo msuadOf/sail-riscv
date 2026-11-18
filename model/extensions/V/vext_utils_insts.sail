@@ -584,7 +584,6 @@ $endif
 val read_vreg_seg : forall 'n 'm 'p 'q, 'n >= 0 & is_sew_bitsize('m) & nfields_range('q). (int('n), int('m), int('p), int('q), vregidx) -> vector('n, bits('q * 'm))
 function read_vreg_seg(num_elem, SEW, LMUL_pow, nf, vrid) = {
   assert_vector_num_elem(num_elem);
-  assert_nfields(nf);
   let LMUL_reg : int = if LMUL_pow <= 0 then 1 else 2 ^ LMUL_pow;
   var vreg_list : vector('q, vector('n, bits('m))) = vector_init(vector_init(zeros()));
   var result : vector('n, bits('q * 'm)) = vector_init(zeros());

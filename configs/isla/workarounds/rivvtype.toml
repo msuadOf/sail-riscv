@@ -17,9 +17,9 @@ max_forks_per_region = 1
 sample_bias = 16
 sample_bias_direction = "fallthrough"
 file = "extensions/V/vext_control.sail"
-start_line = 512
+start_line = 498
 start_column = 2
-end_line = 515
+end_line = 501
 end_column = 1
 
 # init_masked_source 的逐 lane foreach。基线日志在 452:11-464:5 持续因 vl/vr0 fork。
