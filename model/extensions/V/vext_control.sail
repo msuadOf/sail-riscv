@@ -69,6 +69,20 @@ function assert_widened_lmul_pow(LMUL_pow : int) -> unit = {
   }
 }
 
+function assert_nfields(nf : int) -> unit = {
+  match nf {
+    1 => (),
+    2 => (),
+    3 => (),
+    4 => (),
+    5 => (),
+    6 => (),
+    7 => (),
+    8 => (),
+    _ => assert(false)
+  }
+}
+
 function assert_vector_num_elem_upto_32(num_elem : int) -> unit = {
   if num_elem <= 8 then {
     match num_elem {
