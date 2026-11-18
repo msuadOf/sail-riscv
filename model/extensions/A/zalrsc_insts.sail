@@ -40,16 +40,14 @@ function clause execute LOADRES(aq, rl, rs1, width, rd) = {
   // This is checked during decoding.
   assert(width <= xlen_bytes);
 
-  match width {
-    4 => match vmem_read(rs1, zeros(), 4, LoadReserved(Data), aq, aq & rl, true) {
-      Ok(data) => { X(rd) = sign_extend(data); RETIRE_SUCCESS },
-      Err(e) => e,
+  if width != 4 & width != 8 then return Illegal_Instruction();
+
+  match vmem_read(rs1, zeros(), width, LoadReserved(Data), aq, aq & rl, true) {
+    Ok(data) => {
+      X(rd) = sign_extend(data);
+      RETIRE_SUCCESS
     },
-    8 => match vmem_read(rs1, zeros(), 8, LoadReserved(Data), aq, aq & rl, true) {
-      Ok(data) => { X(rd) = sign_extend(data); RETIRE_SUCCESS },
-      Err(e) => e,
-    },
-    _ => Illegal_Instruction(),
+    Err(e) => e,
   }
 }
 
@@ -71,23 +69,14 @@ function clause execute STORECON(aq, rl, rs2, rs1, width, rd) = {
 
   // normal non-rmem case
   // RMEM: SC is allowed to succeed (but might fail later)
-  match width {
-    1 => match vmem_write(rs1, zeros(), 1, X(rs2)[7 .. 0], StoreConditional(Data), aq & rl, rl, true) {
-      Ok(b) => { X(rd) = zero_extend(bool_bit(~(b))); cancel_reservation(); RETIRE_SUCCESS },
-      Err(e) => e,
+  let data = X(rs2)[width * 8 - 1 .. 0];
+  match vmem_write(rs1, zeros(), width, data, StoreConditional(Data), aq & rl, rl, true) {
+    Ok(b) => {
+      X(rd) = zero_extend(bool_bit(~(b)));
+      cancel_reservation();
+      RETIRE_SUCCESS
     },
-    2 => match vmem_write(rs1, zeros(), 2, X(rs2)[15 .. 0], StoreConditional(Data), aq & rl, rl, true) {
-      Ok(b) => { X(rd) = zero_extend(bool_bit(~(b))); cancel_reservation(); RETIRE_SUCCESS },
-      Err(e) => e,
-    },
-    4 => match vmem_write(rs1, zeros(), 4, X(rs2)[31 .. 0], StoreConditional(Data), aq & rl, rl, true) {
-      Ok(b) => { X(rd) = zero_extend(bool_bit(~(b))); cancel_reservation(); RETIRE_SUCCESS },
-      Err(e) => e,
-    },
-    8 => match vmem_write(rs1, zeros(), 8, X(rs2)[63 .. 0], StoreConditional(Data), aq & rl, rl, true) {
-      Ok(b) => { X(rd) = zero_extend(bool_bit(~(b))); cancel_reservation(); RETIRE_SUCCESS },
-      Err(e) => e,
-    },
+    Err(e) => e,
   }
 }
 
