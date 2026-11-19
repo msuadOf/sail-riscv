@@ -26,7 +26,6 @@ function clause execute VGHSH_VV(vs2, vs1, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
-  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vs1_val = read_vreg(num_elem, SEW, LMUL_pow, vs1);
@@ -72,7 +71,6 @@ function clause execute VGMUL_VV(vs2, vd) = {
   then return Illegal_Instruction();
 
   assert(SEW == 32);
-  assert_sew_32(SEW);
 
   let vs2_val = read_vreg(num_elem, SEW, LMUL_pow, vs2);
   let vd_val  = read_vreg(num_elem, SEW, LMUL_pow, vd);
