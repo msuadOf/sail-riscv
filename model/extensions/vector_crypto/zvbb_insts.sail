@@ -593,8 +593,6 @@ function clause execute VWSLL_VV(vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -647,8 +645,6 @@ function clause execute VWSLL_VX(vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -700,8 +696,6 @@ function clause execute VWSLL_VI(vm, vs2, uimm, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;

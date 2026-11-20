@@ -555,7 +555,6 @@ mapping clause encdec = VIMTYPE(funct6, vs2, simm, vd)
 
 function clause execute VIMTYPE(funct6, vs2, simm, vd) = {
   let SEW      = get_sew();
-  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
   assert_vector_num_elem(num_elem);
@@ -615,7 +614,6 @@ mapping clause encdec = VIMCTYPE(funct6, vs2, simm, vd)
 
 function clause execute VIMCTYPE(funct6, vs2, simm, vd) = {
   let SEW      = get_sew();
-  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
   assert_vector_num_elem(num_elem);
@@ -674,7 +672,6 @@ mapping clause encdec = VIMSTYPE(funct6, vs2, simm, vd)
 
 function clause execute VIMSTYPE(funct6, vs2, simm, vd) = {
   let SEW      = get_sew();
-  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
   assert_vector_num_elem(num_elem);
@@ -741,7 +738,6 @@ mapping clause encdec = VICMPTYPE(funct6, vm, vs2, simm, vd)
 
 function clause execute VICMPTYPE(funct6, vm, vs2, simm, vd) = {
   let SEW      = get_sew();
-  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
   assert_vector_num_elem(num_elem);

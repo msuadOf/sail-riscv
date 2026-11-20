@@ -48,7 +48,6 @@ mapping clause encdec = VVTYPE(funct6, vm, vs2, vs1, vd)
 function clause execute VVTYPE(funct6, vm, vs2, vs1, vd) = {
   let SEW_pow  = get_sew_pow();
   let SEW      = get_sew();
-  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
 
@@ -258,8 +257,6 @@ function clause execute NVSTYPE(funct6, vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -333,8 +330,6 @@ function clause execute NVTYPE(funct6, vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -679,8 +674,6 @@ function clause execute NXSTYPE(funct6, vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -753,8 +746,6 @@ function clause execute NXTYPE(funct6, vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -952,8 +943,6 @@ mapping clause encdec = MOVETYPEX (rs1, vd)
 function clause execute MOVETYPEX(rs1, vd) = {
   let SEW      = get_sew();
   let LMUL_pow = get_lmul_pow();
-  assert_sew(SEW);
-  assert_lmul_pow(LMUL_pow);
   let num_elem = get_num_elem(LMUL_pow, SEW);
   let num_elem = assert_vector_num_elem_value(num_elem);
 
@@ -1012,7 +1001,6 @@ function clause execute VITYPE(funct6, vm, vs2, simm, vd) = {
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
 
-  assert_sew(SEW);
   assert_vector_num_elem(num_elem);
 
   if illegal_normal(vd, vm) |
@@ -1137,8 +1125,6 @@ function clause execute NISTYPE(funct6, vm, vs2, uimm, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -1211,8 +1197,6 @@ function clause execute NITYPE(funct6, vm, vs2, uimm, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -1354,7 +1338,6 @@ mapping clause encdec = MASKTYPEI(vs2, simm, vd)
 val masktypei_result : forall 'n 'm 'p, 'n >= 0 & is_sew_bitsize('m) .
   (int('n), nat, int, int('p), bits('n), bits('m), vector('n, bits('m)), vector('n, bits('m))) -> vector('n, bits('m))
 function masktypei_result(num_elem, start_element, end_element, real_num_elem, vm_val, scalar_val, vs2_val, vd_val) = {
-  assert_vector_num_elem(num_elem);
   var result = vd_val;
   let tail_ag : agtype = get_vtype_vta();
   foreach (i from 0 to (num_elem - 1)) {
@@ -1379,7 +1362,6 @@ function clause execute MASKTYPEI(vs2, simm, vd) = {
   let end_element   = get_end_element();
   let SEW           = get_sew();
   let LMUL_pow      = get_lmul_pow();
-  assert_sew(SEW);
   let num_elem      = get_num_elem(LMUL_pow, SEW); // max(VLMAX,VLEN/SEW))
   assert_vector_num_elem(num_elem);
   let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (0 - LMUL_pow); // VLMAX
@@ -1416,7 +1398,6 @@ mapping clause encdec = MOVETYPEI (vd, simm)
 
 function clause execute MOVETYPEI(vd, simm) = {
   let SEW      = get_sew();
-  assert_sew(SEW);
   let LMUL_pow = get_lmul_pow();
   let num_elem = get_num_elem(LMUL_pow, SEW);
   let num_elem = assert_vector_num_elem_value(num_elem);
@@ -1739,8 +1720,6 @@ function clause execute WVVTYPE(funct6, vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -1817,8 +1796,6 @@ function clause execute WVTYPE(funct6, vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -1889,8 +1866,6 @@ function clause execute WMVVTYPE(funct6, vm, vs2, vs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -2328,8 +2303,6 @@ function clause execute WVXTYPE(funct6, vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -2406,8 +2379,6 @@ function clause execute WXTYPE(funct6, vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;
@@ -2478,8 +2449,6 @@ function clause execute WMVXTYPE(funct6, vm, vs2, rs1, vd) = {
 
   assert(SEW_widen <= 64);
   assert(LMUL_pow_widen <= 3);
-  assert_widened_sew(SEW_widen);
-  assert_widened_lmul_pow(LMUL_pow_widen);
 
   let 'n = num_elem;
   let 'm = SEW;

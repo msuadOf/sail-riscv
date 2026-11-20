@@ -48,27 +48,6 @@ function assert_lmul_pow(LMUL_pow : int) -> unit = {
   }
 }
 
-function assert_widened_sew(SEW : int) -> unit = {
-  match SEW {
-    16 => (),
-    32 => (),
-    64 => (),
-    _  => assert(false)
-  }
-}
-
-function assert_widened_lmul_pow(LMUL_pow : int) -> unit = {
-  match LMUL_pow {
-    -2 => (),
-    -1 => (),
-    0  => (),
-    1  => (),
-    2  => (),
-    3  => (),
-    _  => assert(false)
-  }
-}
-
 function assert_nfields(nf : int) -> unit = {
   match nf {
     1 => (),

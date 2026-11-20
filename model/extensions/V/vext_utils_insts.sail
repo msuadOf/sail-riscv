@@ -243,7 +243,6 @@ function illegal_indexed_store(vs3 : vregidx, nf : nfields, EEW_index : int, EMU
 // Scalar register shaping
 val get_scalar : forall 'm, 'm >= 8. (regidx, int('m)) -> bits('m)
 function get_scalar(rs1, SEW) = {
-  assert_sew(SEW);
   if SEW <= xlen then {
     // Least significant SEW bits
     X(rs1)[SEW - 1 .. 0]
@@ -260,7 +259,6 @@ function get_velem_quad(v, i) = v[4 * i + 3] @ v[4 * i + 2] @ v[4 * i + 1] @ v[4
 // Divide the input bitvector into 4 equal slices and store them in vd starting at position 4*i
 val write_velem_quad : forall 'n, 'n > 0 . (vregidx, sew_bitsize, bits('n), nat) -> unit
 function write_velem_quad(vd, SEW, input, i) = {
-  assert_sew(SEW);
   foreach(j from 0 to 3) {
     assert((j + 1) * SEW <= 'n);
     write_single_element(SEW, 4 * i + j, vd, input[(j + 1) * SEW - 1 .. j * SEW])
@@ -385,8 +383,8 @@ $endif
 val init_masked_result : forall 'n 'm 'p, 'n >= 0 . (int('n), int('m), int('p), vector('n, bits('m)), bits('n)) -> result((vector('n, bits('m)), bits('n)), unit)
 $ifdef SYMBOLIC
 function init_masked_result(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
-  assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
+    assert_lmul_pow(LMUL_pow);
     let start_element : nat = get_start_element();
     let end_element   = get_end_element();
     let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
@@ -496,8 +494,8 @@ function init_masked_result_carry_default(num_elem, _EEW, LMUL_pow, vd_val) = {
 val init_masked_result_carry : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n)) -> result((bits('n), bits('n)), unit)
 $ifdef SYMBOLIC
 function init_masked_result_carry(num_elem, EEW, LMUL_pow, vd_val) = {
-  assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
+    assert_lmul_pow(LMUL_pow);
     let start_element : nat = get_start_element();
     let end_element   = get_end_element();
     let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
@@ -562,8 +560,8 @@ function init_masked_result_cmp_default(num_elem, _EEW, LMUL_pow, vd_val, vm_val
 val init_masked_result_cmp : forall 'n, 'n >= 0 . (int('n), sew_bitsize, int, bits('n), bits('n)) -> result((bits('n), bits('n)), unit)
 $ifdef SYMBOLIC
 function init_masked_result_cmp(num_elem, EEW, LMUL_pow, vd_val, vm_val) = {
-  assert_lmul_pow(LMUL_pow);
   if __isla_use_extra_ops then {
+    assert_lmul_pow(LMUL_pow);
     let start_element : nat = get_start_element();
     let end_element   = get_end_element();
     let real_num_elem = if LMUL_pow >= 0 then num_elem else num_elem / (2 ^ (0 - LMUL_pow));
@@ -603,7 +601,6 @@ function read_vreg_seg(num_elem, SEW, LMUL_pow, nf, vrid) = {
 // Shift amounts
 val get_shift_amount : forall 'n, 0 <= 'n . (bits('n), sew_bitsize) -> nat
 function get_shift_amount(bit_val, SEW) = {
-  assert_sew(SEW);
   let lowlog2bits : range(3, 6) = match SEW {
     8  => 3,
     16 => 4,
